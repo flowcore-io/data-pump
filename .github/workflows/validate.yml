@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  push:
+    branches-ignore: ["main"]
+
+env:
+  NODE_VERSION: ">=18.12.1"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.FLOWCORE_MACHINE_GITHUB_TOKEN }}
+          submodules: true
+      - name: Extract version from deno.json
+        uses: sergeysova/jq-action@v2
+        id: version
+        with:
+          cmd: "jq .version deno.json -r"
+
+      - name: Show my version
+        run: 'echo "version ${{ steps.version.outputs.value }}"'
+
+      - name: Setup Deno2 environment
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno install
+        run: deno install --frozen-lockfile
+      - name: Validate NPM build
+        run: deno run -A bin/build-npm.ts
+      - name: Lint
+        run: deno lint
+      - name: Format
+        run: deno fmt
+      - name: Test
+        run: deno test -A

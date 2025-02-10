@@ -1,0 +1,33 @@
+on:
+  push:
+    branches:
+      - main
+
+env:
+  NODE_VERSION: ">=18.12.1"
+
+name: release-please
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Extract package name from deno.json
+        uses: sergeysova/jq-action@v2
+        id: package
+        with:
+          cmd: "jq .name deno.json -r"
+      - name: Setup Deno2 environment
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno install
+        run: deno install --frozen-lockfile
+      - name: Show package name
+        run: 'echo "version ${{ steps.package.outputs.value }}"'
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.FLOWCORE_MACHINE_GITHUB_TOKEN }}
+          config-file: .github/workflows/release-please-config.json
+          manifest-file: .github/workflows/.release-please-manifest.json
+
