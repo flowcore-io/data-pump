@@ -14,8 +14,15 @@
   },
   "tasks": {},
   "imports": {
+    "@date-fns/utc": "npm:@date-fns/utc@^2.1.0",
     "@deno/dnt": "jsr:@deno/dnt@^0.41.3",
-    "@sinclair/typebox": "npm:@sinclair/typebox@0.32.15"
+    "@flowcore/sdk": "jsr:@flowcore/sdk@^1.11.4",
+    "@flowcore/sdk-oidc-client": "npm:@flowcore/sdk-oidc-client@^1.3.1",
+    "@sinclair/typebox": "npm:@sinclair/typebox@0.32.15",
+    "cassandra-uuid": "npm:cassandra-uuid@^0.1.0",
+    "date-fns": "npm:date-fns@^4.1.0",
+    "nats": "npm:nats@^2.29.1",
+    "rxjs": "npm:rxjs@^7.8.1"
   },
   "fmt": {
     "exclude": [

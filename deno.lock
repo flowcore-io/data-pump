@@ -5,10 +5,10 @@
     "jsr:@deno/cache-dir@~0.10.3": "0.10.3",
     "jsr:@deno/dnt@~0.41.3": "0.41.3",
     "jsr:@deno/graph@~0.73.1": "0.73.1",
+    "jsr:@flowcore/sdk@^1.11.4": "1.11.4",
     "jsr:@std/assert@0.223": "0.223.0",
     "jsr:@std/assert@0.226": "0.226.0",
     "jsr:@std/assert@^1.0.10": "1.0.11",
-    "jsr:@std/assert@^1.0.6": "1.0.9",
     "jsr:@std/bytes@0.223": "0.223.0",
     "jsr:@std/dotenv@*": "0.225.3",
     "jsr:@std/fmt@0.223": "0.223.0",
@@ -23,14 +23,21 @@
     "jsr:@std/path@1.0.0-rc.1": "1.0.0-rc.1",
     "jsr:@std/path@^1.0.8": "1.0.8",
     "jsr:@std/path@~0.225.2": "0.225.2",
-    "jsr:@std/semver@^1.0.3": "1.0.3",
     "jsr:@std/testing@*": "1.0.9",
     "jsr:@ts-morph/bootstrap@0.24": "0.24.0",
     "jsr:@ts-morph/common@0.24": "0.24.0",
+    "npm:@date-fns/tz@*": "1.2.0",
+    "npm:@date-fns/utc@^2.1.0": "2.1.0",
     "npm:@flowcore/sdk-oidc-client@*": "1.3.1",
+    "npm:@flowcore/sdk-oidc-client@^1.3.1": "1.3.1",
     "npm:@sinclair/typebox@0.32.15": "0.32.15",
     "npm:@types/node@*": "22.5.4",
-    "npm:nock@*": "14.0.0"
+    "npm:cassandra-uuid@0.1": "0.1.0",
+    "npm:date-fns@*": "4.1.0",
+    "npm:date-fns@^4.1.0": "4.1.0",
+    "npm:nats@^2.29.1": "2.29.1",
+    "npm:nock@*": "14.0.0",
+    "npm:rxjs@^7.8.1": "7.8.1"
   },
   "jsr": {
     "@david/code-block-writer@13.0.3": {
@@ -60,17 +67,17 @@
     "@deno/graph@0.73.1": {
       "integrity": "cd69639d2709d479037d5ce191a422eabe8d71bb68b0098344f6b07411c84d41"
     },
+    "@flowcore/sdk@1.11.4": {
+      "integrity": "a1b1f9f65fdab93a4b3a46f518eff1a77df41734396db102d88a040c7f6a6a45",
+      "dependencies": [
+        "npm:@sinclair/typebox"
+      ]
+    },
     "@std/assert@0.223.0": {
       "integrity": "eb8d6d879d76e1cc431205bd346ed4d88dc051c6366365b1af47034b0670be24"
     },
     "@std/assert@0.226.0": {
       "integrity": "0dfb5f7c7723c18cec118e080fec76ce15b4c31154b15ad2bd74822603ef75b3"
-    },
-    "@std/assert@1.0.9": {
-      "integrity": "a9f0c611a869cc791b26f523eec54c7e187aab7932c2c8e8bea0622d13680dcd",
-      "dependencies": [
-        "jsr:@std/internal"
-      ]
     },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
@@ -133,9 +140,6 @@
     "@std/path@1.0.8": {
       "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
     },
-    "@std/semver@1.0.3": {
-      "integrity": "7c139c6076a080eeaa4252c78b95ca5302818d7eafab0470d34cafd9930c13c8"
-    },
     "@std/testing@1.0.9": {
       "integrity": "9bdd4ac07cb13e7594ac30e90f6ceef7254ac83a9aeaa089be0008f33aab5cd4",
       "dependencies": [
@@ -158,6 +162,12 @@
     }
   },
   "npm": {
+    "@date-fns/tz@1.2.0": {
+      "integrity": "sha512-LBrd7MiJZ9McsOgxqWX7AaxrDjcFVjWH/tIKJd7pnR7McaslGYOP1QmmiBXdJH/H/yLCT+rcQ7FaPBUxRGUtrg=="
+    },
+    "@date-fns/utc@2.1.0": {
+      "integrity": "sha512-176grgAgU2U303rD2/vcOmNg0kGPbhzckuH1TEP2al7n0AQipZIy9P15usd2TKQCG1g+E1jX/ZVQSzs4sUDwgA=="
+    },
     "@flowcore/sdk-oidc-client@1.3.1": {
       "integrity": "sha512-fUHOmKDQYMqMDlh/KucJiDZ9he12QUkQ2KOJKCVy6GD7qsJs9qiJ8jV9th1Xeuz9kAca4TRXt+spMUhZ4CfUDw=="
     },
@@ -194,11 +204,35 @@
         "undici-types"
       ]
     },
+    "cassandra-uuid@0.1.0": {
+      "integrity": "sha512-XM/UdAVoXJWDcqxVqNe2agYat51C25g5m8nkJ2/ai3QvHwWsRx/+OlziD1c1/jYLlP7kcC1DMO2IF5ldt8EV+A==",
+      "dependencies": [
+        "long"
+      ]
+    },
+    "date-fns@4.1.0": {
+      "integrity": "sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg=="
+    },
     "is-node-process@1.2.0": {
       "integrity": "sha512-Vg4o6/fqPxIjtxgUH5QLJhwZ7gW5diGCVlXpuUfELC62CuxM1iHcRe51f2W1FDy04Ai4KJkagKjx3XaqyfRKXw=="
     },
     "json-stringify-safe@5.0.1": {
       "integrity": "sha512-ZClg6AaYvamvYEE82d3Iyd3vSSIjQ+odgjaTzRuO3s7toCdFKczob2i0zCh7JE8kWn17yvAWhUVxvqGwUalsRA=="
+    },
+    "long@4.0.0": {
+      "integrity": "sha512-XsP+KhQif4bjX1kbuSiySJFNAehNxgLb6hPRGJ9QsUr8ajHkuXGdrHmFUTUUXhDwVX2R5bY4JNZEwbUiMhV+MA=="
+    },
+    "nats@2.29.1": {
+      "integrity": "sha512-OHVsxrQCITTdMKG3So0jhtnBd5jS2u1xpS91UCws7VklsaCbctwg5vT/8lYpVldPW0x3aHGF8uuAoMfCoJy7Sg==",
+      "dependencies": [
+        "nkeys.js"
+      ]
+    },
+    "nkeys.js@1.1.0": {
+      "integrity": "sha512-tB/a0shZL5UZWSwsoeyqfTszONTt4k2YS0tuQioMOD180+MbombYVgzDUYHlx+gejYK6rgf08n/2Df99WY0Sxg==",
+      "dependencies": [
+        "tweetnacl"
+      ]
     },
     "nock@14.0.0": {
       "integrity": "sha512-3Z2ZoZoYTR/y2I+NI16+6IzfZFKBX7MrADtoBAm7v/QKqxQUhKw+Dh+847PPS1j/FDutjfIXfrh3CJF74yITWg==",
@@ -214,8 +248,20 @@
     "propagate@2.0.1": {
       "integrity": "sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag=="
     },
+    "rxjs@7.8.1": {
+      "integrity": "sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==",
+      "dependencies": [
+        "tslib"
+      ]
+    },
     "strict-event-emitter@0.5.1": {
       "integrity": "sha512-vMgjE/GGEPEFnhFub6pa4FmJBRBVOLpIII2hvCZ8Kzb7K0hlHo7mQv6xYrBvCL2LtAIBwFUK8wvuJgTVSQ5MFQ=="
+    },
+    "tslib@2.8.1": {
+      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
+    },
+    "tweetnacl@1.0.3": {
+      "integrity": "sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw=="
     },
     "undici-types@6.19.8": {
       "integrity": "sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw=="
@@ -224,9 +270,14 @@
   "workspace": {
     "dependencies": [
       "jsr:@deno/dnt@~0.41.3",
-      "jsr:@std/assert@^1.0.6",
-      "jsr:@std/semver@^1.0.3",
-      "npm:@sinclair/typebox@0.32.15"
+      "jsr:@flowcore/sdk@^1.11.4",
+      "npm:@date-fns/utc@^2.1.0",
+      "npm:@flowcore/sdk-oidc-client@^1.3.1",
+      "npm:@sinclair/typebox@0.32.15",
+      "npm:cassandra-uuid@0.1",
+      "npm:date-fns@^4.1.0",
+      "npm:nats@^2.29.1",
+      "npm:rxjs@^7.8.1"
     ]
   }
 }
