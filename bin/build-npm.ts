@@ -1,5 +1,5 @@
 // ex. scripts/build_npm.ts
-import { build, emptyDir } from "jsr:@deno/dnt"
+import { build, emptyDir } from "@deno/dnt"
 import denoJson from "../deno.json" with { type: "json" }
 await emptyDir("./npm")
 
@@ -11,6 +11,7 @@ await build({
   shims: {
     // see JS docs for overview and more options
     deno: true,
+    webSocket: true,
   },
   package: {
     name: denoJson.name,
@@ -24,6 +25,9 @@ await build({
     },
     bugs: {
       url: "https://github.com/flowcore-io/flowcore-data-pump/issues",
+    },
+    devDependencies: {
+      "@types/ws": "^8.5.10",
     },
   },
   postBuild() {

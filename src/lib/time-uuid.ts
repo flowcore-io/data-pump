@@ -1,17 +1,17 @@
-import { TimeUuid as CassandraTimeUuid } from "cassandra-uuid"
 import { subMilliseconds } from "date-fns"
 import { utc } from "@date-fns/utc"
 import type { Buffer } from "node:buffer"
+import { types } from "cassandra-driver"
 
 export class TimeUuid {
-  constructor(private readonly timeUuid: CassandraTimeUuid) {}
+  constructor(private readonly timeUuid: types.TimeUuid) {}
 
   public static fromDate(date: Date, ticks?: number, nodeId?: string | Buffer, clockId?: string | Buffer) {
-    return new TimeUuid(CassandraTimeUuid.fromDate(utc(date), ticks, nodeId, clockId))
+    return new TimeUuid(types.TimeUuid.fromDate(utc(date), ticks, nodeId, clockId))
   }
 
   public static fromString(value: string) {
-    return new TimeUuid(CassandraTimeUuid.fromString(value))
+    return new TimeUuid(types.TimeUuid.fromString(value))
   }
 
   private getDatePrecision(): { date: Date; ticks: number } {
