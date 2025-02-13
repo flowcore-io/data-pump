@@ -251,9 +251,13 @@ export class DataPump {
     }
   }
 
-  private updateState() {
+  private updateState(eventId?: string) {
     const firstEvent = this.buffer[0]
     if (!firstEvent) {
+      if (eventId) {
+        const timeUuid = TimeUuid.fromString(eventId)
+        return this.options.stateManager.setState({ timeBucket: timeUuid.getTimeBucket(), eventId })
+      }
       return
     }
     const timeUuid = TimeUuid.fromString(firstEvent.event.eventId)
@@ -342,6 +346,7 @@ export class DataPump {
       return
     }
     // this.logger.info("Acknowledging events", { events: eventIds.length })
+    const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         return false
@@ -351,7 +356,11 @@ export class DataPump {
     if (this.bufferWaiter && this.buffer.length <= this.options.buffer.size - this.options.buffer.threshold) {
       this.bufferWaiter()
     }
-    await this.updateState()
+    if (!this.buffer.length) {
+      await this.updateState(lastEventInBuffer?.event.eventId)
+    } else {
+      await this.updateState()
+    }
   }
 
   private async waitForNotifier() {
