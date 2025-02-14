@@ -96,7 +96,8 @@
     "@flowcore/sdk@1.11.10": {
       "integrity": "f5caa8d3c60efffaec4f1ddece6331359569a749930c932c37d5f4547fde225f",
       "dependencies": [
-        "npm:@sinclair/typebox"
+        "npm:@sinclair/typebox",
+        "npm:rxjs"
       ]
     },
     "@std/assert@0.217.0": {
