@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/flowcore-io/data-pump/compare/v0.1.4...v0.1.5) (2025-02-14)
+
+
+### Bug Fixes
+
+* add type ([a59707c](https://github.com/flowcore-io/data-pump/commit/a59707c52c735acb2c39c9a106698d609eb76a4a))
+
 ## [0.1.4](https://github.com/flowcore-io/data-pump/compare/v0.1.3...v0.1.4) (2025-02-14)
 
 
