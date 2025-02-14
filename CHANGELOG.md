@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/flowcore-io/data-pump/compare/v0.1.2...v0.1.3) (2025-02-13)
+
+
+### Bug Fixes
+
+* fix statemanager when buffer is empty ([9e6b5b6](https://github.com/flowcore-io/data-pump/commit/9e6b5b6f7806b2c294faceaaf2b49141e51231dc))
+
 ## [0.1.2](https://github.com/flowcore-io/data-pump/compare/v0.1.1...v0.1.2) (2025-02-12)
 
 
