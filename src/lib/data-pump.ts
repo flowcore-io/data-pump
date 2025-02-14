@@ -286,7 +286,7 @@ export class DataPump {
   private async updateTimeBuckets() {
     this._timeBuckets = []
     let first = true
-    let cursor: string | undefined
+    let cursor: number | undefined
     while (cursor !== undefined || first) {
       first = false
       const command = new EventsFetchTimeBucketsByNamesCommand({
