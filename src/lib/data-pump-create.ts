@@ -1,18 +1,31 @@
-import OidcClient from "@flowcore/sdk-oidc-client"
 import { FlowcoreClient, type FlowcoreEvent } from "@flowcore/sdk"
 import { DataPump, type DataPumpStateManager, type Logger } from "./data-pump.ts"
 import { WebSocketNotifier } from "./ws-notifier.ts"
 import { NatsNotifier } from "./nats-notifier.ts"
 
-const defaultAuthUrl = "https://auth.flowcore.io/realms/flowcore/.well-known/openid-configuration"
+export const noOpLogger: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+}
+
+interface DataPumpClientOptionsAuthOidcClient {
+  oidcClient: {
+    getToken: () => Promise<{ accessToken: string }>
+  }
+}
+
+interface DataPumpClientOptionsAuthApiKey {
+  apiKey: string
+  apiKeyId: string
+}
+
+type DataPumpClientOptionsAuth = DataPumpClientOptionsAuthOidcClient | DataPumpClientOptionsAuthApiKey
 
 export interface DataPumpClientOptions {
   logger?: Logger
-  auth: {
-    clientId: string
-    clientSecret: string
-    authUrl?: string
-  }
+  auth: DataPumpClientOptionsAuth
   dataSource: {
     tenant: string
     dataCore: string
@@ -34,14 +47,18 @@ export interface DataPumpClientOptions {
 }
 
 export function createDataPump(options: DataPumpClientOptions): DataPump {
-  const authClient = new OidcClient.OidcClient(
-    options.auth.clientId,
-    options.auth.clientSecret,
-    options.auth.authUrl ?? defaultAuthUrl,
-  )
-  const flowcoreClient = new FlowcoreClient({
-    getBearerToken: async () => (await authClient.getToken()).accessToken ?? null,
-  })
+  let flowcoreClient: FlowcoreClient
+  if ("oidcClient" in options.auth) {
+    const authClient = options.auth.oidcClient
+    flowcoreClient = new FlowcoreClient({
+      getBearerToken: async () => (await authClient.getToken()).accessToken ?? null,
+    })
+  } else {
+    flowcoreClient = new FlowcoreClient({
+      apiKey: options.auth.apiKey,
+      apiKeyId: options.auth.apiKeyId,
+    })
+  }
 
   const stateManager = options.stateManager ?? {
     getState: () => null,
@@ -53,11 +70,7 @@ export function createDataPump(options: DataPumpClientOptions): DataPump {
       servers: options.natsServers,
     })
     : new WebSocketNotifier({
-      auth: {
-        clientId: options.auth.clientId,
-        clientSecret: options.auth.clientSecret,
-        authUrl: options.auth.authUrl ?? defaultAuthUrl,
-      },
+      auth: options.auth,
       dataSource: options.dataSource,
       logger: options.logger,
     })

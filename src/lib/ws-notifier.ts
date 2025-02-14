@@ -1,10 +1,22 @@
 import type { DataPumpNotifier, Logger } from "./data-pump.ts"
 import { Subject } from "rxjs"
 import { NotificationClient, type NotificationEvent } from "@flowcore/sdk"
-import OidcClient from "@flowcore/sdk-oidc-client"
+
+interface WebSocketNotifierOptionsAuthOidcClient {
+  oidcClient: {
+    getToken: () => Promise<{ accessToken: string }>
+  }
+}
+
+interface WebSocketNotifierOptionsAuthApiKey {
+  apiKey: string
+  apiKeyId: string
+}
+
+type WebSocketNotifierOptionsAuth = WebSocketNotifierOptionsAuthOidcClient | WebSocketNotifierOptionsAuthApiKey
 
 export class WebSocketNotifier {
-  private readonly authClient: OidcClient.OidcClient
+  private readonly authOptions: WebSocketNotifierOptionsAuth
   private subject?: Subject<NotificationEvent>
   private notificationClient?: NotificationClient
   private dataSource: {
@@ -18,11 +30,7 @@ export class WebSocketNotifier {
   private timeoutMs: number
 
   constructor(options: {
-    auth: {
-      clientId: string
-      clientSecret: string
-      authUrl: string
-    }
+    auth: WebSocketNotifierOptionsAuth
     dataSource: {
       tenant: string
       dataCore: string
@@ -32,11 +40,7 @@ export class WebSocketNotifier {
     logger?: Logger
     timeoutMs?: number
   }) {
-    this.authClient = new OidcClient.OidcClient(
-      options.auth.clientId,
-      options.auth.clientSecret,
-      options.auth.authUrl,
-    )
+    this.authOptions = options.auth
     this.dataSource = options.dataSource
     this.logger = options.logger
     this.timeoutMs = options.timeoutMs ?? 20_000
@@ -59,7 +63,7 @@ export class WebSocketNotifier {
         })
         this.notificationClient = new NotificationClient(
           this.subject,
-          this.authClient,
+          this.authOptions,
           {
             tenant: this.dataSource.tenant,
             dataCore: this.dataSource.dataCore,
