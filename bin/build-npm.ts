@@ -28,6 +28,7 @@ await build({
     },
     devDependencies: {
       "@types/ws": "^8.5.10",
+      "@types/long": "^5.0.0",
     },
   },
   postBuild() {
