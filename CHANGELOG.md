@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6](https://github.com/flowcore-io/data-pump/compare/v0.1.5...v0.1.6) (2025-02-17)
+
+
+### Bug Fixes
+
+* add onEventsFail ([00c59ff](https://github.com/flowcore-io/data-pump/commit/00c59ffae41dd64260e99bb439da553865bc5c5b))
+* set onFailedEvents ([09f8015](https://github.com/flowcore-io/data-pump/commit/09f8015e2171c587f3e23edd44313cdebe1fcc4f))
+* update readme ([b078763](https://github.com/flowcore-io/data-pump/commit/b078763a77994a701929500ac8c09fff1629b941))
+
 ## [0.1.5](https://github.com/flowcore-io/data-pump/compare/v0.1.4...v0.1.5) (2025-02-14)
 
 
