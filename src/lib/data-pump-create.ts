@@ -88,6 +88,7 @@ export function createDataPump(options: DataPumpClientOptions): DataPump {
     ? {
       concurrency: options.processor.concurrency ?? 1,
       onEvents: options.processor.onEvents,
+      onFailedEvents: options.processor.onFailedEvents,
     }
     : undefined
 
