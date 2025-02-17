@@ -35,7 +35,7 @@ export interface DataPumpClientOptions {
   buffer?: {
     size?: number
     threshold?: number
-    maxDeliveryCount?: number
+    maxRedeliveryCount?: number
     achknowledgeTimeoutMs?: number
   }
   stateManager?: DataPumpStateManager
@@ -80,7 +80,7 @@ export function createDataPump(options: DataPumpClientOptions): DataPump {
   const buffer = {
     size: bufferSize,
     threshold: options.buffer?.threshold ?? Math.round(bufferSize * 0.1),
-    maxDeliveryCount: options.buffer?.maxDeliveryCount ?? 3,
+    maxRedeliveryCount: options.buffer?.maxRedeliveryCount ?? 3,
     achknowledgeTimeoutMs: options.buffer?.achknowledgeTimeoutMs ?? 10_000,
   }
 

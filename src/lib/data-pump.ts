@@ -43,7 +43,7 @@ interface DataPumpOptions {
   buffer: {
     size: number
     threshold: number
-    maxDeliveryCount: number
+    maxRedeliveryCount: number
     achknowledgeTimeoutMs: number
   }
   processor?: {
@@ -246,7 +246,10 @@ export class DataPump {
     const reopenedEvents: FlowcoreEvent[] = []
     let lastEvent: FlowcoreEvent | undefined
     this.buffer = this.buffer.filter((event) => {
-      if (event.deliveryId === deliveryId && event.deliveryCount > this.options.buffer.maxDeliveryCount) {
+      if (
+        event.deliveryId === deliveryId && this.options.buffer.maxRedeliveryCount > -1 &&
+        event.deliveryCount > this.options.buffer.maxRedeliveryCount
+      ) {
         failedEvents.push(event.event)
         lastEvent = event.event
         return false

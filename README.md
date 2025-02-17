@@ -31,6 +31,12 @@ const dataPump = createDataPump({
       console.error(`Failed ${events.length} events`)
     },
   },
+  buffer: {
+    size: 10_000,
+    threshold: 1_000,
+    maxRedeliveryCount: 1,
+    achknowledgeTimeoutMs: 1_000,
+  },
   logger: console,
 })
 
