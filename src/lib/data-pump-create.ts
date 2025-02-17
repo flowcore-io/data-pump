@@ -41,7 +41,8 @@ export interface DataPumpClientOptions {
   stateManager?: DataPumpStateManager
   processor?: {
     concurrency?: number
-    onEvents: (events: FlowcoreEvent[]) => Promise<void>
+    onEvents: (events: FlowcoreEvent[]) => Promise<boolean> | boolean
+    onFailedEvents?: (events: FlowcoreEvent[]) => Promise<void> | void
   }
   natsServers?: string[]
 }

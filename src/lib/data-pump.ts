@@ -48,7 +48,8 @@ interface DataPumpOptions {
   }
   processor?: {
     concurrency: number
-    onEvents: (events: FlowcoreEvent[]) => Promise<void>
+    onEvents: (events: FlowcoreEvent[]) => Promise<boolean> | boolean
+    onFailedEvents?: (events: FlowcoreEvent[]) => Promise<void> | void
   }
 }
 
@@ -138,11 +139,13 @@ export class DataPump {
         if (!this.running) {
           break
         }
-        await this.options.processor.onEvents(events)
-        await this.acknowledgeInner(events.map((event) => event.eventId))
+        const success = await this.options.processor.onEvents(events)
+        if (success) {
+          await this.acknowledgeInner(events.map((event) => event.eventId))
+        }
       } catch (error) {
         this.logger?.error("Error in processor", { error })
-        this.stop()
+        await this.stop()
       }
     }
   }
@@ -235,19 +238,38 @@ export class DataPump {
     return this.eventBufferLoop()
   }
 
-  private reOpen(eventIds: string[], deliveryId: string) {
+  private async reOpen(eventIds: string[], deliveryId: string) {
     if (!eventIds.length) {
       return
     }
-    this.buffer.forEach((event) => {
+    const failedEvents: FlowcoreEvent[] = []
+    const reopenedEvents: FlowcoreEvent[] = []
+    let lastEvent: FlowcoreEvent | undefined
+    this.buffer = this.buffer.filter((event) => {
+      if (event.deliveryId === deliveryId && event.deliveryCount > this.options.buffer.maxDeliveryCount) {
+        failedEvents.push(event.event)
+        lastEvent = event.event
+        return false
+      }
       if (event.deliveryId === deliveryId && eventIds.includes(event.event.eventId)) {
         event.status = FlowcoreBufferEventStatus.OPEN
         event.deliveryId = ""
+        reopenedEvents.push(event.event)
       }
+      return true
     })
+
+    if (reopenedEvents.length) {
+      this.waiter?.()
+    }
 
     if (this.bufferWaiter && this.buffer.length <= this.options.buffer.size - this.options.buffer.threshold) {
       this.bufferWaiter()
+    }
+
+    if (failedEvents.length) {
+      await this.options.processor?.onFailedEvents?.(failedEvents)
+      await this.updateState(lastEvent?.eventId)
     }
   }
 
