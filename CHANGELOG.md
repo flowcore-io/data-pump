@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/flowcore-io/data-pump/compare/v0.1.6...v0.1.7) (2025-02-17)
+
+
+### Bug Fixes
+
+* rename to maxRedeliveryCount ([5ad7484](https://github.com/flowcore-io/data-pump/commit/5ad74848f55e60f37a4a29b40641d72ae9d8596c))
+
 ## [0.1.6](https://github.com/flowcore-io/data-pump/compare/v0.1.5...v0.1.6) (2025-02-17)
 
 
