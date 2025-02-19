@@ -7,7 +7,7 @@ export const noOpLogger: Logger = {
   debug: () => {},
   info: () => {},
   warn: () => {},
-  error: () => {},
+  error: console.error,
 }
 
 interface DataPumpClientOptionsAuthOidcClient {
@@ -23,6 +23,9 @@ interface DataPumpClientOptionsAuthApiKey {
 
 type DataPumpClientOptionsAuth = DataPumpClientOptionsAuthOidcClient | DataPumpClientOptionsAuthApiKey
 
+/**
+ * Create data pump client options
+ */
 export interface DataPumpClientOptions {
   logger?: Logger
   auth: DataPumpClientOptionsAuth
