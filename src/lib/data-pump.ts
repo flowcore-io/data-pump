@@ -50,7 +50,9 @@ interface DataPumpOptions {
     concurrency: number
     onEvents: (events: FlowcoreEvent[]) => Promise<boolean> | boolean
     onFailedEvents?: (events: FlowcoreEvent[]) => Promise<void> | void
+    onDone?: () => Promise<void> | void
   }
+  stopAt?: Date
 }
 
 export interface DataPumpState {
@@ -59,8 +61,9 @@ export interface DataPumpState {
 }
 
 export interface DataPumpStateManager {
-  getState(): Promise<DataPumpState | null> | DataPumpState | null
-  setState(state: DataPumpState): Promise<void> | void
+  getState: () => Promise<DataPumpState | null> | DataPumpState | null
+  setState?: (state: DataPumpState) => Promise<void> | void
+  stopAt?: () => Date
 }
 
 export interface DataPumpNotifier {
@@ -77,6 +80,11 @@ export class DataPump {
   private running = false
   private notifierAbortController?: AbortController
   private dataCoreId?: string
+  private stopAt?: {
+    timeBucket: string
+    eventId: string
+    eventBufferReached: boolean
+  }
 
   constructor(private options: DataPumpOptions) {
     this.state = {
@@ -92,6 +100,18 @@ export class DataPump {
 
     await this.updateTimeBuckets()
 
+    if (this.options.stopAt) {
+      const timeBucket = format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000")
+      const lastTimeBucket = this.getClosestTimeBucket(timeBucket, true)
+      const lastEventId = TimeUuid.fromDate(this.options.stopAt).toString()
+      this.stopAt = {
+        timeBucket: lastTimeBucket,
+        eventId: lastEventId,
+        eventBufferReached: false,
+      }
+      console.log("stop at", this.stopAt)
+    }
+
     const newState = await this.options.stateManager.getState()
     if (!newState) {
       this.state.timeBucket = this.getClosestTimeBucket(this.getNowTimeBucket())
@@ -99,6 +119,10 @@ export class DataPump {
     } else {
       this.state.timeBucket = this.getClosestTimeBucket(newState.timeBucket)
       this.state.eventId = newState.eventId
+    }
+
+    if (this.stopAt?.timeBucket && this.state.timeBucket > this.stopAt.timeBucket) {
+      throw new Error("Stop at time is lower than current state")
     }
 
     this.running = true
@@ -156,6 +180,11 @@ export class DataPump {
       return
     }
 
+    if (this.stopAt?.eventBufferReached) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000))
+      return this.eventBufferLoop()
+    }
+
     // Buffer is full, wait for some space
     if (this.buffer.length >= this.options.buffer.size - this.options.buffer.threshold && this.running) {
       this.logger?.debug("Buffer is full, waiting for some space")
@@ -184,6 +213,7 @@ export class DataPump {
       timeBucket: this.state.timeBucket,
       afterEventId: this.state.eventId,
       pageSize: eventsToFetch,
+      toEventId: this.stopAt?.eventId,
     })
 
     const result = await this.options.flowcoreClient.execute(command)
@@ -218,6 +248,13 @@ export class DataPump {
 
     // If we don't have a next cursor move to next time bucket
     if (!result.nextCursor) {
+      // Check if we reached the stop at
+      if (this.state.timeBucket === this.stopAt?.timeBucket) {
+        this.stopAt.eventBufferReached = true
+        this.logger?.debug("Reached stop at")
+        return this.eventBufferLoop()
+      }
+
       // Get next time bucket
       const nextTimeBucketIndex = this.timeBuckets.indexOf(this.state.timeBucket) + 1
       // There is no next time bucket
@@ -281,13 +318,13 @@ export class DataPump {
     if (!firstEvent) {
       if (eventId) {
         const timeUuid = TimeUuid.fromString(eventId)
-        return this.options.stateManager.setState({ timeBucket: timeUuid.getTimeBucket(), eventId })
+        return this.options.stateManager.setState?.({ timeBucket: timeUuid.getTimeBucket(), eventId })
       }
       return
     }
     const timeUuid = TimeUuid.fromString(firstEvent.event.eventId)
     const timeBucket = firstEvent.event.timeBucket
-    return this.options.stateManager.setState({ timeBucket, eventId: timeUuid.getBefore().toString() })
+    return this.options.stateManager.setState?.({ timeBucket, eventId: timeUuid.getBefore().toString() })
   }
 
   private get timeBuckets() {
@@ -298,9 +335,15 @@ export class DataPump {
     return this._timeBuckets
   }
 
-  private getClosestTimeBucket(timeBucket: string) {
+  private getClosestTimeBucket(timeBucket: string, getBefore = false) {
     if (!timeBucket.match(/^\d{14}$/)) {
       throw new Error(`Invalid timebucket: ${timeBucket}`)
+    }
+    if (getBefore) {
+      return (
+        this.timeBuckets.findLast((t) => Number.parseFloat(t) <= Number.parseFloat(timeBucket)) ??
+          this.timeBuckets[this.timeBuckets.length - 1]
+      )
     }
     return (
       this.timeBuckets.find((t) => Number.parseFloat(t) >= Number.parseFloat(timeBucket)) ??
@@ -385,6 +428,11 @@ export class DataPump {
       await this.updateState(lastEventInBuffer?.event.eventId)
     } else {
       await this.updateState()
+    }
+
+    if (!this.buffer.length && this.stopAt?.eventBufferReached) {
+      await this.options.processor?.onDone?.()
+      await this.stop()
     }
   }
 

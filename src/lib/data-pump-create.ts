@@ -46,7 +46,9 @@ export interface DataPumpClientOptions {
     concurrency?: number
     onEvents: (events: FlowcoreEvent[]) => Promise<boolean> | boolean
     onFailedEvents?: (events: FlowcoreEvent[]) => Promise<void> | void
+    onDone?: () => Promise<void> | void
   }
+  stopAt?: Date
   natsServers?: string[]
 }
 
@@ -92,6 +94,7 @@ export function createDataPump(options: DataPumpClientOptions): DataPump {
       concurrency: options.processor.concurrency ?? 1,
       onEvents: options.processor.onEvents,
       onFailedEvents: options.processor.onFailedEvents,
+      onDone: options.processor.onDone,
     }
     : undefined
 
@@ -103,6 +106,7 @@ export function createDataPump(options: DataPumpClientOptions): DataPump {
     processor,
     notifier: notifier.getNotifier(),
     logger: options.logger,
+    stopAt: options.stopAt,
   })
 
   return dataPump
