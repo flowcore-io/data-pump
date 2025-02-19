@@ -199,8 +199,8 @@ export class DataPump {
     // How many events should we fetch
     const eventsToFetch = this.options.buffer.size - this.buffer.length
 
-    this.logger?.debug(
-      `fetching ${eventsToFetch} events from ${this.state.timeBucket} @ ${this.state.eventId ?? "-"}`,
+    this.logger?.info(
+      `fetching events from ${this.state.timeBucket} @ ${this.state.eventId ?? "-"}`,
     )
 
     const timeStart = Date.now()
@@ -237,7 +237,7 @@ export class DataPump {
     // Check if we have a waiter and if we have events, notify the waiter
     events.length && this.waiter?.()
 
-    this.logger?.debug(
+    this.logger?.info(
       `Got ${result.events.length} events from ${this.state.timeBucket} @ ${
         this.state.eventId ?? "-"
       } in ${time}ms. Buffer size ${this.buffer.length}`,
@@ -444,7 +444,7 @@ export class DataPump {
   }
 
   private async waitForNotifier() {
-    this.logger?.debug("No more events, waiting for notifier...")
+    this.logger?.info("No more events, waiting for notifier...")
     this.notifierAbortController = new AbortController()
     await this.options.notifier.wait(
       { ...this.options.dataSource, dataCoreId: await this.getDataCoreId() },
