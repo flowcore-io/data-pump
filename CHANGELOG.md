@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/flowcore-io/data-pump/compare/v0.1.10...v0.1.11) (2025-02-19)
+
+
+### Bug Fixes
+
+* fix for stop at ([efded7a](https://github.com/flowcore-io/data-pump/commit/efded7ad473e9b533378eb0b0c629ca7805ba2e4))
+
 ## [0.1.10](https://github.com/flowcore-io/data-pump/compare/v0.1.9...v0.1.10) (2025-02-19)
 
 
