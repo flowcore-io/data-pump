@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/flowcore-io/data-pump/compare/v0.1.9...v0.1.10) (2025-02-19)
+
+
+### Bug Fixes
+
+* add stop at option ([e0d90eb](https://github.com/flowcore-io/data-pump/commit/e0d90eb48dea096ee8cc9602b9b3acf9a706d7f8))
+
 ## [0.1.9](https://github.com/flowcore-io/data-pump/compare/v0.1.8...v0.1.9) (2025-02-19)
 
 
