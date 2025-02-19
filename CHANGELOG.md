@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/flowcore-io/data-pump/compare/v0.1.7...v0.1.8) (2025-02-19)
+
+
+### Bug Fixes
+
+* add return types to uuid utils ([a0c56e8](https://github.com/flowcore-io/data-pump/commit/a0c56e8d0dd1c9bb27b61e6d27163fa8d16f414a))
+* export time uuid util ([b08cc80](https://github.com/flowcore-io/data-pump/commit/b08cc80a9d7ae78dad027a8f370c7af9854acbf0))
+
 ## [0.1.7](https://github.com/flowcore-io/data-pump/compare/v0.1.6...v0.1.7) (2025-02-17)
 
 
