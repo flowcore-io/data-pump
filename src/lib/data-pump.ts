@@ -252,6 +252,7 @@ export class DataPump {
       if (this.state.timeBucket === this.stopAt?.timeBucket) {
         this.stopAt.eventBufferReached = true
         this.logger?.debug("Reached stop at")
+        this.waiter?.()
         return this.eventBufferLoop()
       }
 
@@ -374,6 +375,12 @@ export class DataPump {
   private async pullInner(amount: number): Promise<FlowcoreEvent[]> {
     if (!this.running) {
       throw new Error("Data pump not running")
+    }
+
+    if (this.stopAt?.eventBufferReached && this.buffer.length === 0) {
+      await this.options.processor?.onDone?.()
+      await this.stop()
+      return []
     }
 
     const deliveryId = crypto.randomUUID()
