@@ -39,4 +39,8 @@ export class TimeUuid {
   public getTimeBucket(): string {
     return format(startOfHour(this.timeUuid.getDate()), "yyyyMMddHH0000")
   }
+
+  public getDate(): Date {
+    return this.timeUuid.getDate()
+  }
 }
