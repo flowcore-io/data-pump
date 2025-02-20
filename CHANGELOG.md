@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/flowcore-io/data-pump/compare/v0.2.0...v0.2.1) (2025-02-20)
+
+
+### Bug Fixes
+
+* remove usage of console ([29f747c](https://github.com/flowcore-io/data-pump/commit/29f747c8ec0f41ab39766df9ef25a8b6fcf6fc91))
+
 ## [0.2.0](https://github.com/flowcore-io/data-pump/compare/v0.1.11...v0.2.0) (2025-02-20)
 
 
