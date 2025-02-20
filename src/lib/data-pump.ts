@@ -109,7 +109,7 @@ export class DataPump {
         eventId: lastEventId,
         eventBufferReached: false,
       }
-      console.log("stop at", this.stopAt)
+      this.logger?.debug("stop at", `${this.stopAt.timeBucket} @ ${this.stopAt.eventId}`)
     }
 
     const newState = await this.options.stateManager.getState()
