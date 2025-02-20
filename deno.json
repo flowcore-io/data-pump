@@ -18,8 +18,8 @@
     "@deno/dnt": "jsr:@deno/dnt@^0.41.3",
     "@flowcore/sdk": "jsr:@flowcore/sdk@^1.11.10",
     "@flowcore/sdk-oidc-client": "npm:@flowcore/sdk-oidc-client@^1.3.1",
+    "@flowcore/time-uuid": "jsr:@flowcore/time-uuid@^0.1.1",
     "@sinclair/typebox": "npm:@sinclair/typebox@0.32.15",
-    "cassandra-driver": "npm:cassandra-driver@^4.7.2",
     "date-fns": "npm:date-fns@^4.1.0",
     "nats": "npm:nats@^2.29.1",
     "rxjs": "npm:rxjs@^7.8.1"

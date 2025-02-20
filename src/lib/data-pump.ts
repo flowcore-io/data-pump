@@ -6,7 +6,7 @@ import {
   type FlowcoreEvent,
   TenantFetchCommand,
 } from "@flowcore/sdk"
-import { TimeUuid } from "./time-uuid.ts"
+import { TimeUuid } from "@flowcore/time-uuid"
 import { format, startOfHour } from "date-fns"
 import { utc } from "@date-fns/utc"
 
@@ -115,7 +115,7 @@ export class DataPump {
     const newState = await this.options.stateManager.getState()
     if (!newState) {
       this.state.timeBucket = this.getClosestTimeBucket(this.getNowTimeBucket())
-      this.state.eventId = TimeUuid.fromNow().toString()
+      this.state.eventId = TimeUuid.now().toString()
     } else {
       this.state.timeBucket = this.getClosestTimeBucket(newState.timeBucket)
       this.state.eventId = newState.eventId
@@ -318,8 +318,9 @@ export class DataPump {
     const firstEvent = this.buffer[0]
     if (!firstEvent) {
       if (eventId) {
-        const timeUuid = TimeUuid.fromString(eventId)
-        return this.options.stateManager.setState?.({ timeBucket: timeUuid.getTimeBucket(), eventId })
+        const date = TimeUuid.fromString(eventId).getDate()
+        const timeBucket = format(startOfHour(utc(date)), "yyyyMMddHH0000")
+        return this.options.stateManager.setState?.({ timeBucket, eventId })
       }
       return
     }
