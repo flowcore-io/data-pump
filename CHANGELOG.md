@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/flowcore-io/data-pump/compare/v0.1.11...v0.2.0) (2025-02-20)
+
+
+### Features
+
+* remove time-uuid and cassandra driver util and use package ([3b35efa](https://github.com/flowcore-io/data-pump/commit/3b35efa912f430d6404ce30500b7582a2e200526))
+
+
+### Bug Fixes
+
+* logging changes ([5ac7fa3](https://github.com/flowcore-io/data-pump/commit/5ac7fa3daba5876ea2194c3bb87c2a5819c32159))
+
 ## [0.1.11](https://github.com/flowcore-io/data-pump/compare/v0.1.10...v0.1.11) (2025-02-19)
 
 
