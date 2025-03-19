@@ -1,8 +1,8 @@
 {
-	"deno.enable": true,
-	"eslint.enable": false,
-	"prettier.enable": false,
-	"biome.enable": false,
-	"biome.enabled": false,
-	"conventionalCommits.scopes": ["exports"]
+  "deno.enable": true,
+  "eslint.enable": false,
+  "prettier.enable": false,
+  "biome.enable": false,
+  "biome.enabled": false,
+  "conventionalCommits.scopes": ["exports"]
 }

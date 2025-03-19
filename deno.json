@@ -28,7 +28,9 @@
   "fmt": {
     "exclude": [
       "node_modules",
-      "npm"
+      "npm",
+      ".github",
+      "CHANGELOG.md"
     ],
     "lineWidth": 120,
     "indentWidth": 2,

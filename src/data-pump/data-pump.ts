@@ -64,11 +64,11 @@ export class FlowcoreDataPump {
     }
   }
 
-  public get isRunning() {
+  public get isRunning(): boolean {
     return this.running
   }
 
-  public static create(options: FlowcoreDataPumpOptions) {
+  public static create(options: FlowcoreDataPumpOptions): FlowcoreDataPump {
     const dataSource = new FlowcoreDataSource({
       auth: options.auth,
       dataSource: options.dataSource,
@@ -95,7 +95,7 @@ export class FlowcoreDataPump {
     )
   }
 
-  public async start(callback?: (error?: Error) => void) {
+  public async start(callback?: (error?: Error) => void): Promise<void> {
     if (this.running) {
       throw new Error("Data pump already running")
     }
@@ -134,7 +134,7 @@ export class FlowcoreDataPump {
       .catch((error) => callback(error))
   }
 
-  public restart(state: FlowcoreDataPumpState, stopAt?: Date | null) {
+  public restart(state: FlowcoreDataPumpState, stopAt?: Date | null): void {
     this.restartTo = state
     if (stopAt !== undefined) {
       this.options.stopAt = stopAt ?? undefined
@@ -142,7 +142,7 @@ export class FlowcoreDataPump {
     this.stop(true)
   }
 
-  public stop(isRestart = false) {
+  public stop(isRestart = false): void {
     this.running = false
     this.buffer = []
     this.updateMetricsGauges()
@@ -361,7 +361,6 @@ export class FlowcoreDataPump {
   // #region Metrics
 
   private updateMetricsGauges() {
-    const start = Date.now()
     const stats = new Map<
       string,
       {
