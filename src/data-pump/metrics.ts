@@ -1,6 +1,6 @@
 import PromClient, { Counter, Gauge } from "prom-client"
 
-const promRegistry = new PromClient.Registry()
+export const dataPumpPromRegistry = new PromClient.Registry()
 
 const bufferEventCountGauge = new Gauge({
   name: "flowcore_data_pump_buffer_events_gauge",
@@ -44,13 +44,13 @@ const sdkCommandsCounter = new Counter({
   labelNames: ["command"],
 })
 
-promRegistry.registerMetric(bufferEventCountGauge)
-promRegistry.registerMetric(bufferReservedEventCountGauge)
-promRegistry.registerMetric(bufferSizeBytesGauge)
-promRegistry.registerMetric(eventsAcknowledgedCounter)
-promRegistry.registerMetric(eventsFailedCounter)
-promRegistry.registerMetric(eventsPulledSizeBytesCounter)
-promRegistry.registerMetric(sdkCommandsCounter)
+dataPumpPromRegistry.registerMetric(bufferEventCountGauge)
+dataPumpPromRegistry.registerMetric(bufferReservedEventCountGauge)
+dataPumpPromRegistry.registerMetric(bufferSizeBytesGauge)
+dataPumpPromRegistry.registerMetric(eventsAcknowledgedCounter)
+dataPumpPromRegistry.registerMetric(eventsFailedCounter)
+dataPumpPromRegistry.registerMetric(eventsPulledSizeBytesCounter)
+dataPumpPromRegistry.registerMetric(sdkCommandsCounter)
 
 export const metrics = {
   bufferEventCountGauge,

@@ -7,8 +7,8 @@ import {
   TenantTranslateNameToIdCommand,
   TimeBucketListCommand,
 } from "@flowcore/sdk"
-import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreDataPumpState } from "./types.ts"
 import { getFlowcoreClient } from "./flowcore-client.ts"
+import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreDataPumpState } from "./types.ts"
 export interface FlowcoreDataSourceOptions {
   auth: FlowcoreDataPumpAuth
   dataSource: FlowcoreDataPumpDataSource
@@ -115,6 +115,9 @@ export class FlowcoreDataSource {
 
   public async getNextTimeBucket(timeBucket: string): Promise<string | null> {
     const closestTimeBucket = await this.getClosestTimeBucket(timeBucket)
+    if (!closestTimeBucket) {
+      return null
+    }
     const timeBuckets = await this.getTimeBuckets()
     const index = timeBuckets.indexOf(closestTimeBucket)
     if (index === -1) {
@@ -123,7 +126,7 @@ export class FlowcoreDataSource {
     return timeBuckets[index + 1] ?? null
   }
 
-  public async getClosestTimeBucket(timeBucket: string, getBefore = false) {
+  public async getClosestTimeBucket(timeBucket: string, getBefore = false): Promise<string | null> {
     const timeBuckets = await this.getTimeBuckets()
     if (!timeBucket.match(/^\d{14}$/)) {
       throw new Error(`Invalid timebucket: ${timeBucket}`)

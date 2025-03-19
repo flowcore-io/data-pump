@@ -1,8 +1,10 @@
+import { NotificationClient, type NotificationEvent } from "@flowcore/sdk"
 import * as Nats from "nats"
 import { Subject } from "rxjs"
-import { NotificationClient, type NotificationEvent } from "@flowcore/sdk"
-import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreLogger } from "./types.ts"
 import { FlowcoreDataSource } from "./data-source.ts"
+import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreLogger } from "./types.ts"
+
+const DEFAULT_TIMEOUT_MS = 20_000
 
 export interface FlowcoreNotifierOptions {
   auth: FlowcoreDataPumpAuth
@@ -18,7 +20,7 @@ export class FlowcoreNotifier {
   private subject?: Subject<NotificationEvent>
   private notificationClient?: NotificationClient
   private eventResolver?: () => void
-  private timer = 0
+  private timer?: number
 
   constructor(private readonly options: FlowcoreNotifierOptions) {
     this.dataSource = new FlowcoreDataSource({
@@ -50,16 +52,18 @@ export class FlowcoreNotifier {
 
     const subscriptions: Nats.Subscription[] = []
     for (const topic of topics) {
-      subscriptions.push(this.nats.subscribe(topic, {
-        callback: () => {
-          this.options.logger?.debug(`Received event from nats: ${topic}`)
-          this.eventResolver?.()
-        },
-      }))
+      subscriptions.push(
+        this.nats.subscribe(topic, {
+          callback: () => {
+            this.options.logger?.debug(`Received event from nats: ${topic}`)
+            this.eventResolver?.()
+          },
+        }),
+      )
     }
 
     clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? 10_000)
+    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     signal?.addEventListener("abort", () => this.eventResolver?.())
 
     await promise
@@ -105,7 +109,7 @@ export class FlowcoreNotifier {
       this.eventResolver = resolve
     })
     clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? 10_000)
+    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     signal?.addEventListener("abort", () => this.eventResolver?.())
     await promise
     this.eventResolver = undefined
@@ -118,15 +122,14 @@ export class FlowcoreNotifier {
         apiKey: this.options.auth.apiKey,
         apiKeyId: this.options.auth.apiKeyId,
       }
-    } else {
-      const getBearerToken = this.options.auth.getBearerToken
-      return {
-        oidcClient: {
-          getToken: async () => ({
-            accessToken: await getBearerToken(),
-          }),
-        },
-      }
+    }
+    const getBearerToken = this.options.auth.getBearerToken
+    return {
+      oidcClient: {
+        getToken: async () => ({
+          accessToken: await getBearerToken(),
+        }),
+      },
     }
   }
 }

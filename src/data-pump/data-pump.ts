@@ -3,6 +3,7 @@ import type { FlowcoreEvent } from "@flowcore/sdk"
 import { TimeUuid } from "@flowcore/time-uuid"
 import { format, startOfHour } from "date-fns"
 import { FlowcoreDataSource } from "./data-source.ts"
+import { metrics } from "./metrics.ts"
 import { FlowcoreNotifier } from "./notifier.ts"
 import type {
   FlowcoreDataPumpAuth,
@@ -12,7 +13,6 @@ import type {
   FlowcoreDataPumpStateManager,
   FlowcoreLogger,
 } from "./types.ts"
-import { metrics } from "./metrics.ts"
 
 export interface FlowcoreDataPumpOptions {
   auth: FlowcoreDataPumpAuth
@@ -64,6 +64,10 @@ export class FlowcoreDataPump {
     }
   }
 
+  public get isRunning() {
+    return this.running
+  }
+
   public static create(options: FlowcoreDataPumpOptions) {
     const dataSource = new FlowcoreDataSource({
       auth: options.auth,
@@ -75,14 +79,20 @@ export class FlowcoreDataPump {
       natsServers: options.natsServers,
       logger: options.logger,
     })
-    return new FlowcoreDataPump(dataSource, notifier, options.stateManager, {
-      bufferSize: options.bufferSize ?? 1000,
-      bufferThreshold: Math.ceil((options.bufferSize ?? 1000) * 0.1),
-      maxRedeliveryCount: options.maxRedeliveryCount ?? 3,
-      achknowledgeTimeoutMs: options.achknowledgeTimeoutMs ?? 5_000,
-      processor: options.processor,
-      stopAt: options.stopAt,
-    }, options.logger)
+    return new FlowcoreDataPump(
+      dataSource,
+      notifier,
+      options.stateManager,
+      {
+        bufferSize: options.bufferSize ?? 1000,
+        bufferThreshold: Math.ceil((options.bufferSize ?? 1000) * 0.1),
+        maxRedeliveryCount: options.maxRedeliveryCount ?? 3,
+        achknowledgeTimeoutMs: options.achknowledgeTimeoutMs ?? 5_000,
+        processor: options.processor,
+        stopAt: options.stopAt,
+      },
+      options.logger,
+    )
   }
 
   public async start(callback?: (error?: Error) => void) {
@@ -102,9 +112,9 @@ export class FlowcoreDataPump {
 
     if (this.options.stopAt) {
       this.stopAtState = {
-        timeBucket: await this.dataSource.getClosestTimeBucket(
+        timeBucket: (await this.dataSource.getClosestTimeBucket(
           format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000"),
-        ),
+        )) ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
         eventId: TimeUuid.fromDate(this.options.stopAt).toString(),
       }
     }
@@ -132,7 +142,7 @@ export class FlowcoreDataPump {
     this.stop(true)
   }
 
-  public stop(isRestart: boolean = false) {
+  public stop(isRestart = false) {
     this.running = false
     this.buffer = []
     this.updateMetricsGauges()
@@ -156,7 +166,7 @@ export class FlowcoreDataPump {
     return this.stateManager.setState?.({ timeBucket, eventId: stateEventId })
   }
 
-  public async loop(): Promise<void> {
+  private async loop(): Promise<void> {
     do {
       if (this.bufferState.timeBucket === this.stopAtState?.timeBucket) {
         this.logger?.info("Stopping at stopAt state")
@@ -210,7 +220,8 @@ export class FlowcoreDataPump {
 
     if (this.restartTo) {
       await this.dataSource.getTimeBuckets(true)
-      this.restartTo.timeBucket = await this.dataSource.getClosestTimeBucket(this.restartTo.timeBucket)
+      this.restartTo.timeBucket = (await this.dataSource.getClosestTimeBucket(this.restartTo.timeBucket)) ??
+        format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
       this.bufferState = this.restartTo
       this.restartTo = undefined
       this.running = true
@@ -284,7 +295,7 @@ export class FlowcoreDataPump {
     }
   }
 
-  public async reOpen(eventIds: string[], deliveryId: string) {
+  private async reOpen(eventIds: string[], deliveryId: string) {
     let lastEvent: FlowcoreEvent | undefined
     const failedEvents: FlowcoreEvent[] = []
     const reopenedEvents: FlowcoreEvent[] = []
@@ -306,9 +317,16 @@ export class FlowcoreDataPump {
 
     this.updateMetricsGauges()
 
+    if (reopenedEvents.length) {
+      this.logger?.info(`Reopened ${reopenedEvents.length} events`)
+      await this.waiterEvents?.()
+    }
+
     if (!failedEvents.length) {
       return
     }
+
+    this.logger?.info(`Failed ${failedEvents.length} events`)
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
@@ -330,9 +348,10 @@ export class FlowcoreDataPump {
       try {
         const events = await this.reserve(this.options.processor?.concurrency ?? 1)
         await this.options.processor?.handler(events)
+        this.logger?.debug(`Processed ${events.length} events`)
         await this.acknowledge(events.map((event) => event.eventId))
       } catch (error) {
-        this.logger?.warn("Error in processor", { error })
+        this.logger?.error(error as Error)
       }
     }
   }
@@ -343,11 +362,14 @@ export class FlowcoreDataPump {
 
   private updateMetricsGauges() {
     const start = Date.now()
-    const stats = new Map<string, {
-      eventCount: number
-      eventReservedCount: number
-      eventSizeBytes: number
-    }>()
+    const stats = new Map<
+      string,
+      {
+        eventCount: number
+        eventReservedCount: number
+        eventSizeBytes: number
+      }
+    >()
     for (const eventType of this.dataSource.eventTypes) {
       stats.set(eventType, {
         eventCount: 0,
@@ -369,54 +391,70 @@ export class FlowcoreDataPump {
     }
 
     for (const [eventType, stat] of stats) {
-      metrics.bufferEventCountGauge.set({
-        tenant: this.dataSource.tenant,
-        data_core: this.dataSource.dataCore,
-        flow_type: this.dataSource.flowType,
-        event_type: eventType,
-      }, stat.eventCount)
-      metrics.bufferReservedEventCountGauge.set({
-        tenant: this.dataSource.tenant,
-        data_core: this.dataSource.dataCore,
-        flow_type: this.dataSource.flowType,
-        event_type: eventType,
-      }, stat.eventReservedCount)
-      metrics.bufferSizeBytesGauge.set({
-        tenant: this.dataSource.tenant,
-        data_core: this.dataSource.dataCore,
-        flow_type: this.dataSource.flowType,
-        event_type: eventType,
-      }, stat.eventSizeBytes)
+      metrics.bufferEventCountGauge.set(
+        {
+          tenant: this.dataSource.tenant,
+          data_core: this.dataSource.dataCore,
+          flow_type: this.dataSource.flowType,
+          event_type: eventType,
+        },
+        stat.eventCount,
+      )
+      metrics.bufferReservedEventCountGauge.set(
+        {
+          tenant: this.dataSource.tenant,
+          data_core: this.dataSource.dataCore,
+          flow_type: this.dataSource.flowType,
+          event_type: eventType,
+        },
+        stat.eventReservedCount,
+      )
+      metrics.bufferSizeBytesGauge.set(
+        {
+          tenant: this.dataSource.tenant,
+          data_core: this.dataSource.dataCore,
+          flow_type: this.dataSource.flowType,
+          event_type: eventType,
+        },
+        stat.eventSizeBytes,
+      )
     }
-    console.info(`Statistics updated in ${Date.now() - start}ms`)
   }
 
   private incMetricsCounter(name: "acknowledged" | "failed" | "pulled", eventType: string, value: number) {
     switch (name) {
       case "acknowledged":
-        metrics.eventsAcknowledgedCounter.inc({
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        }, value)
+        metrics.eventsAcknowledgedCounter.inc(
+          {
+            tenant: this.dataSource.tenant,
+            data_core: this.dataSource.dataCore,
+            flow_type: this.dataSource.flowType,
+            event_type: eventType,
+          },
+          value,
+        )
         break
       case "failed":
-        metrics.eventsFailedCounter.inc({
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        }, value)
+        metrics.eventsFailedCounter.inc(
+          {
+            tenant: this.dataSource.tenant,
+            data_core: this.dataSource.dataCore,
+            flow_type: this.dataSource.flowType,
+            event_type: eventType,
+          },
+          value,
+        )
         break
       case "pulled":
-        metrics.eventsPulledSizeBytesCounter.inc({
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        }, value)
-        console.log("eventsPulledSizeBytesCounter", metrics.eventsPulledSizeBytesCounter.get())
+        metrics.eventsPulledSizeBytesCounter.inc(
+          {
+            tenant: this.dataSource.tenant,
+            data_core: this.dataSource.dataCore,
+            flow_type: this.dataSource.flowType,
+            event_type: eventType,
+          },
+          value,
+        )
         break
     }
   }
