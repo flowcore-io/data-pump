@@ -35,11 +35,11 @@ jobs:
           deno-version: v2.x
       - name: Deno install
         run: deno install --frozen-lockfile
-      - name: Validate NPM build
-        run: deno run -A bin/build-npm.ts
       - name: Lint
         run: deno lint
       - name: Format
         run: deno fmt
       - name: Test
         run: deno test -A
+      - name: Validate NPM build
+        run: deno run -A bin/build-npm.ts
