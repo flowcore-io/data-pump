@@ -20,7 +20,8 @@ export class FlowcoreNotifier {
   private subject?: Subject<NotificationEvent>
   private notificationClient?: NotificationClient
   private eventResolver?: () => void
-  private timer?: number
+  // deno-lint-ignore no-explicit-any
+  private timer?: any
 
   constructor(private readonly options: FlowcoreNotifierOptions) {
     this.dataSource = new FlowcoreDataSource({
