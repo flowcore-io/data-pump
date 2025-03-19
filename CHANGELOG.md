@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/flowcore-io/data-pump/compare/v0.2.1...v0.3.0) (2025-03-19)
+
+
+### Features
+
+* new data pump ([ead3bca](https://github.com/flowcore-io/data-pump/commit/ead3bca138a38df06f9eb306da6c27de5a5d2b39))
+
+
+### Bug Fixes
+
+* changes ([ca9b28b](https://github.com/flowcore-io/data-pump/commit/ca9b28b7cfd0e9c110fdc42c0f07771215516702))
+* diverse fixes ([4f8928d](https://github.com/flowcore-io/data-pump/commit/4f8928dbabe8460290ec44abe49d045952207188))
+* run npm validate last ([f5ca2dd](https://github.com/flowcore-io/data-pump/commit/f5ca2dd8c9571b334f30371083b2df499d1e79bf))
+* set timer type to any ([846bb71](https://github.com/flowcore-io/data-pump/commit/846bb7188df2be9af7343d66e10fb90ff654746b))
+* update lock file ([d888794](https://github.com/flowcore-io/data-pump/commit/d8887940f16fff7e3357651ceafbc5530f6045c6))
+
 ## [0.2.1](https://github.com/flowcore-io/data-pump/compare/v0.2.0...v0.2.1) (2025-02-20)
 
 
