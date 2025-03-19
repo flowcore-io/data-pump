@@ -2,13 +2,14 @@
   "version": "4",
   "specifiers": {
     "jsr:@david/code-block-writer@^13.0.2": "13.0.3",
+    "jsr:@db/sqlite@*": "0.12.0",
     "jsr:@db/sqlite@0.12": "0.12.0",
     "jsr:@deno/cache-dir@~0.10.3": "0.10.3",
     "jsr:@deno/dnt@*": "0.41.3",
     "jsr:@deno/dnt@~0.41.3": "0.41.3",
     "jsr:@deno/graph@~0.73.1": "0.73.1",
     "jsr:@denosaurs/plug@1": "1.0.6",
-    "jsr:@flowcore/sdk@^1.11.10": "1.11.10",
+    "jsr:@flowcore/sdk@^1.19.1": "1.19.1",
     "jsr:@flowcore/time-uuid@~0.1.1": "0.1.1",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/assert@0.221": "0.221.0",
@@ -48,6 +49,7 @@
     "npm:long@^5.3.1": "5.3.1",
     "npm:nats@^2.29.1": "2.29.1",
     "npm:nock@*": "14.0.0",
+    "npm:prom-client@^15.1.3": "15.1.3",
     "npm:rxjs@^7.8.1": "7.8.1"
   },
   "jsr": {
@@ -94,8 +96,8 @@
         "jsr:@std/path@0.221"
       ]
     },
-    "@flowcore/sdk@1.11.10": {
-      "integrity": "f5caa8d3c60efffaec4f1ddece6331359569a749930c932c37d5f4547fde225f",
+    "@flowcore/sdk@1.19.1": {
+      "integrity": "a237f33ade2e93e44f9b6381a328c2b2a90060b3a421a2883c9662bc1e20430a",
       "dependencies": [
         "npm:@sinclair/typebox",
         "npm:rxjs"
@@ -260,6 +262,9 @@
     "@open-draft/until@2.1.0": {
       "integrity": "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg=="
     },
+    "@opentelemetry/api@1.9.0": {
+      "integrity": "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="
+    },
     "@sinclair/typebox@0.32.15": {
       "integrity": "sha512-5Lrwo7VOiWEBJBhHmqNmf3TPB9ll8gcEshvYJyAIJyCZ2PF48MFOtiDHJNj8+FsNcqImaQYmxVkKBCBlyAa/wg=="
     },
@@ -268,6 +273,9 @@
       "dependencies": [
         "undici-types"
       ]
+    },
+    "bintrees@1.0.2": {
+      "integrity": "sha512-VOMgTMwjAaUG580SXn3LacVgjurrbMme7ZZNYGSSV7mmtY6QQRh0Eg3pwIcntQ77DErK1L0NxkbetjcoXzVwKw=="
     },
     "date-fns@4.1.0": {
       "integrity": "sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg=="
@@ -304,6 +312,13 @@
     "outvariant@1.4.3": {
       "integrity": "sha512-+Sl2UErvtsoajRDKCE5/dBz4DIvHXQQnAxtQTF04OJxY0+DyZXSo5P5Bb7XYWOh81syohlYL24hbDwxedPUJCA=="
     },
+    "prom-client@15.1.3": {
+      "integrity": "sha512-6ZiOBfCywsD4k1BN9IX0uZhF+tJkV8q8llP64G5Hajs4JOeVLPCwpPVcpXy3BwYiUGgyJzsJJQeOIv7+hDSq8g==",
+      "dependencies": [
+        "@opentelemetry/api",
+        "tdigest"
+      ]
+    },
     "propagate@2.0.1": {
       "integrity": "sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag=="
     },
@@ -315,6 +330,12 @@
     },
     "strict-event-emitter@0.5.1": {
       "integrity": "sha512-vMgjE/GGEPEFnhFub6pa4FmJBRBVOLpIII2hvCZ8Kzb7K0hlHo7mQv6xYrBvCL2LtAIBwFUK8wvuJgTVSQ5MFQ=="
+    },
+    "tdigest@0.1.2": {
+      "integrity": "sha512-+G0LLgjjo9BZX2MfdvPfH+MKLCrxlXSYec5DaPYP1fe6Iyhf0/fSmJ0bFiZ1F8BT6cGXl2LpltQptzjXKWEkKA==",
+      "dependencies": [
+        "bintrees"
+      ]
     },
     "tslib@2.8.1": {
       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
@@ -329,13 +350,14 @@
   "workspace": {
     "dependencies": [
       "jsr:@deno/dnt@~0.41.3",
-      "jsr:@flowcore/sdk@^1.11.10",
+      "jsr:@flowcore/sdk@^1.19.1",
       "jsr:@flowcore/time-uuid@~0.1.1",
       "npm:@date-fns/utc@^2.1.0",
       "npm:@flowcore/sdk-oidc-client@^1.3.1",
       "npm:@sinclair/typebox@0.32.15",
       "npm:date-fns@^4.1.0",
       "npm:nats@^2.29.1",
+      "npm:prom-client@^15.1.3",
       "npm:rxjs@^7.8.1"
     ]
   }
