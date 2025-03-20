@@ -3,6 +3,7 @@ import * as Nats from "nats"
 import { Subject } from "rxjs"
 import { FlowcoreDataSource } from "./data-source.ts"
 import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreLogger } from "./types.ts"
+import { noOpLogger } from "../lib/data-pump-create.ts"
 
 const DEFAULT_TIMEOUT_MS = 20_000
 
@@ -99,7 +100,7 @@ export class FlowcoreNotifier {
         flowType: this.dataSource.flowType,
       },
       {
-        logger: this.options.logger,
+        logger: this.options.logger ?? noOpLogger,
         reconnectInterval: 1000,
       },
     )

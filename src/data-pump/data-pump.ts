@@ -114,6 +114,7 @@ export class FlowcoreDataPump {
       this.stopAtState = {
         timeBucket: (await this.dataSource.getClosestTimeBucket(
           format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000"),
+          true,
         )) ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
         eventId: TimeUuid.fromDate(this.options.stopAt).toString(),
       }
@@ -129,6 +130,7 @@ export class FlowcoreDataPump {
     if (!callback) {
       return this.loop()
     }
+
     this.loop()
       .then(() => callback())
       .catch((error) => callback(error))
@@ -168,13 +170,6 @@ export class FlowcoreDataPump {
 
   private async loop(): Promise<void> {
     do {
-      if (this.bufferState.timeBucket === this.stopAtState?.timeBucket) {
-        this.logger?.info("Stopping at stopAt state")
-        await this.waitForBufferEmpty()
-        this.stop()
-        break
-      }
-
       const amountToFetch = this.options.bufferSize - this.buffer.length
 
       if (amountToFetch <= 0) {
@@ -194,6 +189,13 @@ export class FlowcoreDataPump {
 
       this.buffer.push(...events.map((event) => ({ event, status: "open" as const, deliveryCount: 0 })))
       this.updateMetricsGauges()
+
+      if (this.stopAtState?.timeBucket && this.bufferState.timeBucket >= this.stopAtState.timeBucket) {
+        this.logger?.info("Stopping at stopAt state")
+        await this.waitForBufferEmpty()
+        this.stop()
+        break
+      }
 
       events.length && this.waiterEvents?.()
 
@@ -461,6 +463,7 @@ export class FlowcoreDataPump {
   // #endregion
 
   // #region Waiters
+
   private waiterEvents?: () => void
   private async waitForEvents() {
     const promise = new Promise<void>((resolve) => {
@@ -484,5 +487,6 @@ export class FlowcoreDataPump {
     })
     await promise
   }
+
   // #endregion
 }
