@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/flowcore-io/data-pump/compare/v0.3.0...v0.3.1) (2025-03-20)
+
+
+### Bug Fixes
+
+* fix stopat ([6586132](https://github.com/flowcore-io/data-pump/commit/6586132e920cdd68b8450c4bb631fef394a284f6))
+* fix stopat ([fabb15d](https://github.com/flowcore-io/data-pump/commit/fabb15d616c34340ef4928fa7a1828bc57b8cdd0))
+
 ## [0.3.0](https://github.com/flowcore-io/data-pump/compare/v0.2.1...v0.3.0) (2025-03-19)
 
 
