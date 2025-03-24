@@ -190,14 +190,14 @@ export class FlowcoreDataPump {
       this.buffer.push(...events.map((event) => ({ event, status: "open" as const, deliveryCount: 0 })))
       this.updateMetricsGauges()
 
+      events.length && this.waiterEvents?.()
+
       if (this.stopAtState?.timeBucket && this.bufferState.timeBucket >= this.stopAtState.timeBucket) {
         this.logger?.info("Stopping at stopAt state")
         await this.waitForBufferEmpty()
         this.stop()
         break
       }
-
-      events.length && this.waiterEvents?.()
 
       this.bufferState.eventId = events[events.length - 1]?.eventId ?? this.bufferState.eventId
 
