@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.3](https://github.com/flowcore-io/data-pump/compare/v0.3.2...v0.3.3) (2025-03-24)
+
+
+### Bug Fixes
+
+* fix stopat ([54e3aa0](https://github.com/flowcore-io/data-pump/commit/54e3aa0c2fb73b278d3de3299872c7b726de12dc))
+* update lock file ([6682c5b](https://github.com/flowcore-io/data-pump/commit/6682c5bb9157c4e60a63a5c8b0b6d94f65926d57))
+* upgrade flowcore sdk ([29a65f8](https://github.com/flowcore-io/data-pump/commit/29a65f8ea7a70b91b4c20df00b67b60d73a5557d))
+
 ## [0.3.2](https://github.com/flowcore-io/data-pump/compare/v0.3.1...v0.3.2) (2025-03-24)
 
 
