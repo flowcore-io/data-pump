@@ -102,6 +102,7 @@ export class FlowcoreDataSource {
     do {
       const result = await this.flowcoreClient.execute(
         new TimeBucketListCommand({
+          tenant: this.options.dataSource.tenant,
           eventTypeId: (await this.getEventTypeIds()) as [string, ...string[]],
           cursor: cursor || undefined,
         }),
@@ -146,6 +147,7 @@ export class FlowcoreDataSource {
   public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string) {
     const result = await this.flowcoreClient.execute(
       new EventListCommand({
+        tenant: this.options.dataSource.tenant,
         eventTypeId: (await this.getEventTypeIds()) as [string, ...string[]],
         timeBucket: from.timeBucket,
         afterEventId: from.eventId,

@@ -16,7 +16,7 @@
   "imports": {
     "@date-fns/utc": "npm:@date-fns/utc@^2.1.0",
     "@deno/dnt": "jsr:@deno/dnt@^0.41.3",
-    "@flowcore/sdk": "jsr:@flowcore/sdk@^1.19.1",
+    "@flowcore/sdk": "jsr:@flowcore/sdk@^1.21.0",
     "@flowcore/sdk-oidc-client": "npm:@flowcore/sdk-oidc-client@^1.3.1",
     "@flowcore/time-uuid": "jsr:@flowcore/time-uuid@^0.1.1",
     "@sinclair/typebox": "npm:@sinclair/typebox@0.32.15",
