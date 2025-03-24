@@ -105,6 +105,7 @@ export class FlowcoreDataSource {
           tenant: this.options.dataSource.tenant,
           eventTypeId: (await this.getEventTypeIds()) as [string, ...string[]],
           cursor: cursor || undefined,
+          pageSize: 10_000,
         }),
       )
       timeBuckets.push(...result.timeBuckets)
