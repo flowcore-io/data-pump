@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/flowcore-io/data-pump/compare/v0.3.1...v0.3.2) (2025-03-24)
+
+
+### Bug Fixes
+
+* fix for waitForBufferEmpty ([e6c6463](https://github.com/flowcore-io/data-pump/commit/e6c64639ed4a6b5e9b47921185c26d6eea03792b))
+* update readme ([c9416a8](https://github.com/flowcore-io/data-pump/commit/c9416a8882617c4b4c0ddda714d82906321b85ca))
+
 ## [0.3.1](https://github.com/flowcore-io/data-pump/compare/v0.3.0...v0.3.1) (2025-03-20)
 
 
