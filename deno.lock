@@ -99,7 +99,8 @@
     "@flowcore/sdk@1.21.0": {
       "integrity": "82049408e36d3fa9cb22cb5629dacfd12ca7d7771aaf28eb04698ad7d076317c",
       "dependencies": [
-        "npm:@sinclair/typebox"
+        "npm:@sinclair/typebox",
+        "npm:rxjs"
       ]
     },
     "@flowcore/time-uuid@0.1.1": {
