@@ -131,7 +131,7 @@ export class FlowcoreDataPump {
       return this.loop()
     }
 
-    this.loop()
+    void this.loop()
       .then(() => callback())
       .catch((error) => callback(error))
   }
@@ -482,6 +482,9 @@ export class FlowcoreDataPump {
 
   private waiterBufferEmpty?: () => void
   private async waitForBufferEmpty() {
+    if (!this.buffer.length) {
+      return
+    }
     const promise = new Promise<void>((resolve) => {
       this.waiterBufferEmpty = resolve
     })
