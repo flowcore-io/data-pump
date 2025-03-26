@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/flowcore-io/data-pump/compare/v0.3.3...v0.3.4) (2025-03-24)
+
+
+### Bug Fixes
+
+* timebuckets fetch fix ([b3df2fd](https://github.com/flowcore-io/data-pump/commit/b3df2fd529415e978f5143c9b7ffd5eea68130f2))
+
 ## [0.3.3](https://github.com/flowcore-io/data-pump/compare/v0.3.2...v0.3.3) (2025-03-24)
 
 
