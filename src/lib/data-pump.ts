@@ -4,7 +4,6 @@ import {
   EventsFetchTimeBucketsByNamesCommand,
   type FlowcoreClient,
   type FlowcoreEvent,
-  TenantFetchCommand,
 } from "@flowcore/sdk"
 import { TimeUuid } from "@flowcore/time-uuid"
 import { format, startOfHour } from "date-fns"
@@ -490,15 +489,10 @@ export class DataPump {
     if (this.dataCoreId) {
       return this.dataCoreId
     }
-    const tenant = await this.options.flowcoreClient.execute(
-      new TenantFetchCommand({
-        tenant: this.options.dataSource.tenant,
-      }),
-    )
     const dataCore = await this.options.flowcoreClient.execute(
       new DataCoreFetchCommand({
         dataCore: this.options.dataSource.dataCore,
-        tenantId: tenant.id,
+        tenant: this.options.dataSource.tenant,
       }),
     )
     this.dataCoreId = dataCore.id
