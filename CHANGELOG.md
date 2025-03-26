@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/flowcore-io/data-pump/compare/v0.3.4...v0.3.5) (2025-03-26)
+
+
+### Bug Fixes
+
+* was starting at wrong bucket ([542fa8e](https://github.com/flowcore-io/data-pump/commit/542fa8e73ddcb0ef4d4c85ba95d88a693149cc5e))
+
 ## [0.3.4](https://github.com/flowcore-io/data-pump/compare/v0.3.3...v0.3.4) (2025-03-24)
 
 
