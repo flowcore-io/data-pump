@@ -36,4 +36,5 @@ export interface FlowcoreLogger {
 export interface FlowcoreDataPumpProcessor {
   concurrency?: number
   handler: (events: FlowcoreEvent[]) => Promise<void>
+  failedHandler?: (events: FlowcoreEvent[]) => void | Promise<void>
 }

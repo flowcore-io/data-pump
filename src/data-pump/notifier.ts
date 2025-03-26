@@ -8,9 +8,10 @@ import { noOpLogger } from "../lib/data-pump-create.ts"
 const DEFAULT_TIMEOUT_MS = 20_000
 
 export interface FlowcoreNotifierOptions {
-  auth: FlowcoreDataPumpAuth
   dataSource: FlowcoreDataPumpDataSource
+  auth: FlowcoreDataPumpAuth
   natsServers?: string[]
+  pollerIntervalMs?: number
   timeoutMs?: number
   logger?: FlowcoreLogger
 }
@@ -34,12 +35,24 @@ export class FlowcoreNotifier {
   public wait(signal?: AbortSignal) {
     if (this.options.natsServers) {
       return this.waitNats()
+    } else if (this.options.pollerIntervalMs) {
+      return this.waitPoller(this.options.pollerIntervalMs, signal)
     }
     return this.waitWebSocket(signal)
   }
 
+  private async waitPoller(intervalMs: number, signal?: AbortSignal) {
+    this.options.logger?.debug("Waiting for poller")
+    const promise = new Promise<void>((resolve) => {
+      this.eventResolver = resolve
+    })
+    signal?.addEventListener("abort", () => this.eventResolver?.())
+    setTimeout(() => this.eventResolver?.(), Math.min(intervalMs, 1000))
+    await promise
+  }
+
   private async waitNats(signal?: AbortSignal) {
-    this.options.logger?.info("Waiting for nats")
+    this.options.logger?.debug("Waiting for nats")
     if (!this.nats) {
       this.nats = await Nats.connect({ servers: this.options.natsServers })
     }

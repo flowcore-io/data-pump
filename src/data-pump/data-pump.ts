@@ -14,6 +14,28 @@ import type {
   FlowcoreLogger,
 } from "./types.ts"
 
+interface FlowcoreDataPumpNotifierNatsOptions {
+  type: "nats"
+  servers: string[]
+}
+
+interface FlowcoreDataPumpNotifierWebsocketOptions {
+  type: "websocket"
+}
+
+interface FlowcoreDataPumpNotifierPollerOptions {
+  type: "poller"
+  /**
+   * The interval in milliseconds to poll the data pump state (min 1000 ms)
+   */
+  intervalMs: number
+}
+
+type FlowcoreDataPumpNotifierOptions =
+  | FlowcoreDataPumpNotifierNatsOptions
+  | FlowcoreDataPumpNotifierWebsocketOptions
+  | FlowcoreDataPumpNotifierPollerOptions
+
 export interface FlowcoreDataPumpOptions {
   auth: FlowcoreDataPumpAuth
   dataSource: FlowcoreDataPumpDataSource
@@ -22,7 +44,7 @@ export interface FlowcoreDataPumpOptions {
   maxRedeliveryCount?: number
   achknowledgeTimeoutMs?: number
   processor?: FlowcoreDataPumpProcessor
-  natsServers?: string[]
+  notifier?: FlowcoreDataPumpNotifierOptions
   logger?: FlowcoreLogger
   stopAt?: Date
 }
@@ -76,7 +98,8 @@ export class FlowcoreDataPump {
     const notifier = new FlowcoreNotifier({
       auth: options.auth,
       dataSource: options.dataSource,
-      natsServers: options.natsServers,
+      natsServers: options.notifier?.type === "nats" ? options.notifier.servers : undefined,
+      pollerIntervalMs: options.notifier?.type === "poller" ? options.notifier.intervalMs : undefined,
       logger: options.logger,
     })
     return new FlowcoreDataPump(
@@ -212,7 +235,7 @@ export class FlowcoreDataPump {
           const previousTimeBucket = this.bufferState.timeBucket
           this.bufferState.timeBucket = format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
           if (previousTimeBucket === this.bufferState.timeBucket && !events.length) {
-            this.logger?.info("Going live...")
+            this.logger?.debug("Going live...")
             this.abortController = new AbortController()
             await this.notifier.wait(this.abortController.signal)
           }
@@ -329,6 +352,7 @@ export class FlowcoreDataPump {
     }
 
     this.logger?.info(`Failed ${failedEvents.length} events`)
+    void this.options.processor?.failedHandler?.(failedEvents)
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
@@ -350,10 +374,10 @@ export class FlowcoreDataPump {
       try {
         const events = await this.reserve(this.options.processor?.concurrency ?? 1)
         await this.options.processor?.handler(events)
-        this.logger?.debug(`Processed ${events.length} events`)
         await this.acknowledge(events.map((event) => event.eventId))
       } catch (error) {
-        this.logger?.error(error as Error)
+        const errorMessage = error instanceof Error ? error.message : "Unknown error"
+        this.logger?.error(`Failed to process events: ${errorMessage}`)
       }
     }
   }
