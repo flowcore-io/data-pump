@@ -103,7 +103,7 @@ export class FlowcoreDataPump {
     this.updateMetricsGauges()
     const currentState = await this.stateManager.getState()
     const timeBucket = currentState
-      ? await this.dataSource.getNextTimeBucket(currentState.timeBucket)
+      ? await this.dataSource.getClosestTimeBucket(currentState.timeBucket)
       : format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
     this.bufferState = {
       timeBucket: timeBucket ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
