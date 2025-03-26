@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/flowcore-io/data-pump/compare/v0.3.5...v0.4.0) (2025-03-26)
+
+
+### Features
+
+* poller notifier and failedHandler ([e93cf5b](https://github.com/flowcore-io/data-pump/commit/e93cf5ba37f5236d21a7fc9722795fa8f563f97b))
+
 ## [0.3.5](https://github.com/flowcore-io/data-pump/compare/v0.3.4...v0.3.5) (2025-03-26)
 
 
