@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1](https://github.com/flowcore-io/data-pump/compare/v0.4.0...v0.4.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* add fail for failing events ([96f67e4](https://github.com/flowcore-io/data-pump/commit/96f67e49650c8f81dbd65831ab77adca490bb353))
+* update lock file ([1c12ce4](https://github.com/flowcore-io/data-pump/commit/1c12ce49cafee0f6ecf3d144b262b4fbda6c9d29))
+* update SDK ([9dfe77a](https://github.com/flowcore-io/data-pump/commit/9dfe77a608f43791b953b233a9f99c9b8e615cb1))
+
 ## [0.4.0](https://github.com/flowcore-io/data-pump/compare/v0.3.5...v0.4.0) (2025-03-26)
 
 
