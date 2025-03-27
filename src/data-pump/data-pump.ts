@@ -320,6 +320,34 @@ export class FlowcoreDataPump {
     }
   }
 
+  public async fail(eventIds: string[]) {
+    if (!this.running || !eventIds.length) {
+      return
+    }
+    const lastEventInBuffer = this.buffer[this.buffer.length - 1]
+    const failedEvents: FlowcoreEvent[] = []
+    this.buffer = this.buffer.filter((event) => {
+      if (eventIds.includes(event.event.eventId)) {
+        this.incMetricsCounter("failed", event.event.eventType, 1)
+        failedEvents.push(event.event)
+        return false
+      }
+      return true
+    })
+    this.logger?.info(`Failed ${failedEvents.length} events`)
+    void this.options.processor?.failedHandler?.(failedEvents)
+
+    if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
+      this.waiterBufferThreshold?.()
+    }
+
+    await this.updateState(this.buffer.length ? undefined : lastEventInBuffer?.event.eventId)
+
+    if (!this.buffer.length) {
+      this.waiterBufferEmpty?.()
+    }
+  }
+
   private async reOpen(eventIds: string[], deliveryId: string) {
     let lastEvent: FlowcoreEvent | undefined
     const failedEvents: FlowcoreEvent[] = []
