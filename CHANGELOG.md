@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/flowcore-io/data-pump/compare/v0.4.1...v0.4.2) (2025-03-28)
+
+
+### Bug Fixes
+
+* fix for fetching event type ids ([95770d7](https://github.com/flowcore-io/data-pump/commit/95770d794dbe177778b3c2fb6318601e6106d73e))
+
 ## [0.4.1](https://github.com/flowcore-io/data-pump/compare/v0.4.0...v0.4.1) (2025-03-27)
 
 
