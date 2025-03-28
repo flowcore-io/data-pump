@@ -88,8 +88,16 @@ export class FlowcoreDataSource {
     const command = new EventTypeListCommand({
       flowTypeId: await this.getFlowTypeId(),
     })
-    const result = await this.flowcoreClient.execute(command)
-    this.eventTypeIds = result.map((eventType) => eventType.id)
+    const results = await this.flowcoreClient.execute(command)
+    const eventTypeIds: string[] = []
+    for (const eventType of this.eventTypes) {
+      const found = results.find((result) => result.name === eventType)
+      if (!found) {
+        throw new Error(`Event type ${eventType} not found`)
+      }
+      eventTypeIds.push(found.id)
+    }
+    this.eventTypeIds = eventTypeIds
     return this.eventTypeIds
   }
 
@@ -146,10 +154,11 @@ export class FlowcoreDataSource {
   }
 
   public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string) {
+    const eventTypeIds = await this.getEventTypeIds()
     const result = await this.flowcoreClient.execute(
       new EventListCommand({
         tenant: this.options.dataSource.tenant,
-        eventTypeId: (await this.getEventTypeIds()) as [string, ...string[]],
+        eventTypeId: eventTypeIds as [string, ...string[]],
         timeBucket: from.timeBucket,
         afterEventId: from.eventId,
         pageSize: amount,
