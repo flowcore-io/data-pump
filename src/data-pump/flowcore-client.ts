@@ -3,9 +3,9 @@ import type { FlowcoreDataPumpAuth } from "./types.ts"
 import { metrics } from "./metrics.ts"
 
 class FlowcoreClientWithMetrics extends FlowcoreClient {
-  public override execute<Input, Output>(command: Command<Input, Output>): Promise<Output> {
+  public override execute<Input, Output>(command: Command<Input, Output>, directMode?: boolean): Promise<Output> {
     metrics.sdkCommandsCounter.inc({ command: command.constructor.name }, 1)
-    return super.execute(command)
+    return super.execute(command, directMode)
   }
 }
 
