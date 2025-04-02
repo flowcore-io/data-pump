@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/flowcore-io/data-pump/compare/v0.7.2...v0.8.0) (2025-04-02)
+
+
+### Features
+
+* **data-source:** :poop: add directMode and noTranslation options to FlowcoreNotifier ([fabc73e](https://github.com/flowcore-io/data-pump/commit/fabc73ebeff27a34381504c7f100ecddfaf36a34))
+
 ## [0.7.2](https://github.com/flowcore-io/data-pump/compare/v0.7.1...v0.7.2) (2025-04-02)
 
 
