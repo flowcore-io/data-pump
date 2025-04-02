@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/flowcore-io/data-pump/compare/v0.6.0...v0.7.0) (2025-04-02)
+
+
+### Features
+
+* **data-source:** :sparkles: add directMode option to FlowcoreDataPump and FlowcoreDataSource ([4d199f3](https://github.com/flowcore-io/data-pump/commit/4d199f392e4a9e755661b5182982cc62d8c261be))
+
+
+### Bug Fixes
+
+* **deno.lock:** :sparkles: add rxjs dependency to Flowcore SDK ([9883816](https://github.com/flowcore-io/data-pump/commit/98838161c44b33b276d485a6e3595c70220865d9))
+
 ## [0.6.0](https://github.com/flowcore-io/data-pump/compare/v0.5.0...v0.6.0) (2025-04-02)
 
 
