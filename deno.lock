@@ -9,7 +9,7 @@
     "jsr:@deno/dnt@~0.41.3": "0.41.3",
     "jsr:@deno/graph@~0.73.1": "0.73.1",
     "jsr:@denosaurs/plug@1": "1.0.6",
-    "jsr:@flowcore/sdk@^1.24.2": "1.24.2",
+    "jsr:@flowcore/sdk@^1.24.3": "1.24.3",
     "jsr:@flowcore/time-uuid@~0.1.1": "0.1.1",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/assert@0.221": "0.221.0",
@@ -96,8 +96,8 @@
         "jsr:@std/path@0.221"
       ]
     },
-    "@flowcore/sdk@1.24.2": {
-      "integrity": "371e4af55776919bd056e4d0ef29961a773ee2751d338a54d681b6a1321ea6a7",
+    "@flowcore/sdk@1.24.3": {
+      "integrity": "72d3e9a17aab66c805e0ed5de1b49be92bfbc4d96f3fa1629c2b678ff335ee5d",
       "dependencies": [
         "npm:@sinclair/typebox",
         "npm:rxjs"
@@ -350,7 +350,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@deno/dnt@~0.41.3",
-      "jsr:@flowcore/sdk@^1.24.2",
+      "jsr:@flowcore/sdk@^1.24.3",
       "jsr:@flowcore/time-uuid@~0.1.1",
       "npm:@date-fns/utc@^2.1.0",
       "npm:@flowcore/sdk-oidc-client@^1.3.1",
