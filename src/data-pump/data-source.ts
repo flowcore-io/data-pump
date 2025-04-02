@@ -27,7 +27,6 @@ export class FlowcoreDataSource {
 
   constructor(private readonly options: FlowcoreDataSourceOptions) {
     this.flowcoreClient = getFlowcoreClient(this.options.auth, this.options.baseUrlOverride)
-    console.log("this.options", this.options)
   }
 
   public get tenant() {
@@ -54,7 +53,6 @@ export class FlowcoreDataSource {
     if (this.options.noTranslation) {
       this.tenantId = this.options.dataSource.tenant
     } else {
-      console.log("translating tenant", this.options.dataSource.tenant, this.options.directMode)
       const command = new TenantTranslateNameToIdCommand({
         tenant: this.options.dataSource.tenant,
       })
@@ -72,7 +70,6 @@ export class FlowcoreDataSource {
     if (this.options.noTranslation) {
       this.dataCoreId = this.options.dataSource.dataCore
     } else {
-      console.log("translating dataCore", this.options.dataSource.dataCore, this.options.directMode)
       const command = new DataCoreFetchCommand({
         tenant: this.options.dataSource.tenant,
         dataCore: this.options.dataSource.dataCore,
@@ -91,7 +88,6 @@ export class FlowcoreDataSource {
     if (this.options.noTranslation) {
       this.flowTypeId = this.options.dataSource.flowType
     } else {
-      console.log("translating flowType", this.options.dataSource.flowType, this.options.directMode)
       const command = new FlowTypeFetchCommand({
         dataCoreId: await this.getDataCoreId(),
         flowType: this.options.dataSource.flowType,
@@ -110,7 +106,6 @@ export class FlowcoreDataSource {
     if (this.options.noTranslation) {
       this.eventTypeIds = this.options.dataSource.eventTypes
     } else {
-      console.log("translating eventTypes", this.options.dataSource.eventTypes, this.options.directMode)
       const command = new EventTypeListCommand({
         flowTypeId: await this.getFlowTypeId(),
       })
@@ -135,7 +130,6 @@ export class FlowcoreDataSource {
       
     let cursor: number | undefined
     const timeBuckets: string[] = []
-    console.log("getting timeBuckets, directMode: ", this.options.directMode)
     do {
       const result = await this.flowcoreClient.execute(
         new TimeBucketListCommand({
@@ -184,7 +178,6 @@ export class FlowcoreDataSource {
   }
 
   public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string) {
-    console.log("getEvents, directMode: ", this.options.directMode)
     const eventTypeIds = await this.getEventTypeIds()
     const result = await this.flowcoreClient.execute(
       new EventListCommand({
