@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/flowcore-io/data-pump/compare/v0.4.2...v0.5.0) (2025-04-02)
+
+
+### Features
+
+* **data-pump:** :sparkles: add baseUrlOverride option to FlowcoreDataPump and FlowcoreDataSource ([ab898b4](https://github.com/flowcore-io/data-pump/commit/ab898b4f0550f5e56fe4d2d794c5d70d8673b7cc))
+* **data-source:** :sparkles: add urlOverride option to FlowcoreDataSource ([b72f8ad](https://github.com/flowcore-io/data-pump/commit/b72f8ade4c521657aaebe4861a2ff10b16fed7d5))
+
 ## [0.4.2](https://github.com/flowcore-io/data-pump/compare/v0.4.1...v0.4.2) (2025-03-28)
 
 
