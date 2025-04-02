@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/flowcore-io/data-pump/compare/v0.7.1...v0.7.2) (2025-04-02)
+
+
+### Bug Fixes
+
+* **data-source:** :poop: add debug logs for options and translations ([ec93b67](https://github.com/flowcore-io/data-pump/commit/ec93b675eaab743d5dd1aba7842c1aa2fa6e6474))
+
 ## [0.7.1](https://github.com/flowcore-io/data-pump/compare/v0.7.0...v0.7.1) (2025-04-02)
 
 
