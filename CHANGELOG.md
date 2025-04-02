@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/flowcore-io/data-pump/compare/v0.7.0...v0.7.1) (2025-04-02)
+
+
+### Bug Fixes
+
+* **deno:** :poop: update Flowcore SDK to version 1.24.3 ([b830721](https://github.com/flowcore-io/data-pump/commit/b830721d1b6c61dae7682948073224b854d784f4))
+
 ## [0.7.0](https://github.com/flowcore-io/data-pump/compare/v0.6.0...v0.7.0) (2025-04-02)
 
 
