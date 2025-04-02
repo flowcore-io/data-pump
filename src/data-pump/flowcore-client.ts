@@ -9,11 +9,11 @@ class FlowcoreClientWithMetrics extends FlowcoreClient {
   }
 }
 
-export function getFlowcoreClient(auth: FlowcoreDataPumpAuth, urlOverride?: string) {
+export function getFlowcoreClient(auth: FlowcoreDataPumpAuth, baseUrlOverride?: string) {
   const client = new FlowcoreClientWithMetrics(auth)
 
-  if (urlOverride) {
-    client.setBaseUrl(urlOverride)
+  if (baseUrlOverride) {
+    client.setBaseUrl(baseUrlOverride)
   }
 
   return client

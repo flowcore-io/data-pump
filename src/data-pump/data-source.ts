@@ -12,7 +12,7 @@ import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreDataPump
 export interface FlowcoreDataSourceOptions {
   auth: FlowcoreDataPumpAuth
   dataSource: FlowcoreDataPumpDataSource
-  urlOverride?: string
+  baseUrlOverride?: string
 }
 
 export class FlowcoreDataSource {
@@ -24,7 +24,7 @@ export class FlowcoreDataSource {
   private timeBuckets?: string[]
 
   constructor(private readonly options: FlowcoreDataSourceOptions) {
-    this.flowcoreClient = getFlowcoreClient(this.options.auth, this.options.urlOverride)
+    this.flowcoreClient = getFlowcoreClient(this.options.auth, this.options.baseUrlOverride)
   }
 
   public get tenant() {
