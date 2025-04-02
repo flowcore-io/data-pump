@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/flowcore-io/data-pump/compare/v0.5.0...v0.6.0) (2025-04-02)
+
+
+### Features
+
+* **data-source:** :sparkles: add noTranslation option to FlowcoreDataPump and FlowcoreDataSource ([692b79e](https://github.com/flowcore-io/data-pump/commit/692b79e2f1b07b1300a7ab016ec39efb23dc578b))
+
 ## [0.5.0](https://github.com/flowcore-io/data-pump/compare/v0.4.2...v0.5.0) (2025-04-02)
 
 
