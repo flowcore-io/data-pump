@@ -48,6 +48,7 @@ export interface FlowcoreDataPumpOptions {
   logger?: FlowcoreLogger
   stopAt?: Date
   baseUrlOverride?: string
+  noTranslation?: boolean
 }
 
 interface FlowcoreDataPumpInnerOptions {
@@ -96,6 +97,7 @@ export class FlowcoreDataPump {
       auth: options.auth,
       dataSource: options.dataSource,
       baseUrlOverride: options.baseUrlOverride,
+      noTranslation: options.noTranslation,
     })
     const notifier = new FlowcoreNotifier({
       auth: options.auth,

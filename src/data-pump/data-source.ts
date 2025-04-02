@@ -13,6 +13,7 @@ export interface FlowcoreDataSourceOptions {
   auth: FlowcoreDataPumpAuth
   dataSource: FlowcoreDataPumpDataSource
   baseUrlOverride?: string
+  noTranslation?: boolean
 }
 
 export class FlowcoreDataSource {
@@ -47,11 +48,16 @@ export class FlowcoreDataSource {
     if (this.tenantId) {
       return this.tenantId
     }
-    const command = new TenantTranslateNameToIdCommand({
-      tenant: this.options.dataSource.tenant,
-    })
-    const result = await this.flowcoreClient.execute(command)
-    this.tenantId = result.id
+
+    if (this.options.noTranslation) {
+      this.tenantId = this.options.dataSource.tenant
+    } else {
+      const command = new TenantTranslateNameToIdCommand({
+        tenant: this.options.dataSource.tenant,
+      })
+      const result = await this.flowcoreClient.execute(command)
+      this.tenantId = result.id
+    }
     return this.tenantId
   }
 
@@ -59,12 +65,17 @@ export class FlowcoreDataSource {
     if (this.dataCoreId) {
       return this.dataCoreId
     }
-    const command = new DataCoreFetchCommand({
-      tenant: this.options.dataSource.tenant,
-      dataCore: this.options.dataSource.dataCore,
-    })
-    const result = await this.flowcoreClient.execute(command)
-    this.dataCoreId = result.id
+
+    if (this.options.noTranslation) {
+      this.dataCoreId = this.options.dataSource.dataCore
+    } else {
+      const command = new DataCoreFetchCommand({
+        tenant: this.options.dataSource.tenant,
+        dataCore: this.options.dataSource.dataCore,
+      })
+      const result = await this.flowcoreClient.execute(command)
+      this.dataCoreId = result.id
+    }
     return this.dataCoreId
   }
 
@@ -73,12 +84,16 @@ export class FlowcoreDataSource {
       return this.flowTypeId
     }
 
-    const command = new FlowTypeFetchCommand({
-      dataCoreId: await this.getDataCoreId(),
-      flowType: this.options.dataSource.flowType,
-    })
-    const result = await this.flowcoreClient.execute(command)
-    this.flowTypeId = result.id
+    if (this.options.noTranslation) {
+      this.flowTypeId = this.options.dataSource.flowType
+    } else {
+      const command = new FlowTypeFetchCommand({
+        dataCoreId: await this.getDataCoreId(),
+        flowType: this.options.dataSource.flowType,
+      })
+      const result = await this.flowcoreClient.execute(command)
+      this.flowTypeId = result.id
+    }
     return this.flowTypeId
   }
 
@@ -86,19 +101,24 @@ export class FlowcoreDataSource {
     if (this.eventTypeIds) {
       return this.eventTypeIds
     }
-    const command = new EventTypeListCommand({
-      flowTypeId: await this.getFlowTypeId(),
-    })
-    const results = await this.flowcoreClient.execute(command)
-    const eventTypeIds: string[] = []
-    for (const eventType of this.eventTypes) {
-      const found = results.find((result) => result.name === eventType)
-      if (!found) {
-        throw new Error(`Event type ${eventType} not found`)
+
+    if (this.options.noTranslation) {
+      this.eventTypeIds = this.options.dataSource.eventTypes
+    } else {
+      const command = new EventTypeListCommand({
+        flowTypeId: await this.getFlowTypeId(),
+      })
+      const results = await this.flowcoreClient.execute(command)
+      const eventTypeIds: string[] = []
+      for (const eventType of this.eventTypes) {
+        const found = results.find((result) => result.name === eventType)
+        if (!found) {
+          throw new Error(`Event type ${eventType} not found`)
+        }
+        eventTypeIds.push(found.id)
       }
-      eventTypeIds.push(found.id)
+      this.eventTypeIds = eventTypeIds
     }
-    this.eventTypeIds = eventTypeIds
     return this.eventTypeIds
   }
 
@@ -106,6 +126,7 @@ export class FlowcoreDataSource {
     if (this.timeBuckets && !force) {
       return this.timeBuckets
     }
+    
     let cursor: number | undefined
     const timeBuckets: string[] = []
     do {
