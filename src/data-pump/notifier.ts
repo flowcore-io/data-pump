@@ -14,6 +14,8 @@ export interface FlowcoreNotifierOptions {
   pollerIntervalMs?: number
   timeoutMs?: number
   logger?: FlowcoreLogger
+  directMode?: boolean
+  noTranslation?: boolean
 }
 
 export class FlowcoreNotifier {
@@ -29,6 +31,8 @@ export class FlowcoreNotifier {
     this.dataSource = new FlowcoreDataSource({
       auth: this.options.auth,
       dataSource: this.options.dataSource,
+      directMode: this.options.directMode,
+      noTranslation: this.options.noTranslation,
     })
   }
 

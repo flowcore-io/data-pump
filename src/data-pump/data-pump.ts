@@ -107,6 +107,8 @@ export class FlowcoreDataPump {
       natsServers: options.notifier?.type === "nats" ? options.notifier.servers : undefined,
       pollerIntervalMs: options.notifier?.type === "poller" ? options.notifier.intervalMs : undefined,
       logger: options.logger,
+      directMode: options.directMode,
+      noTranslation: options.noTranslation,
     })
     return new FlowcoreDataPump(
       dataSource,
