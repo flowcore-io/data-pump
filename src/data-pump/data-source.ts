@@ -14,6 +14,7 @@ export interface FlowcoreDataSourceOptions {
   dataSource: FlowcoreDataPumpDataSource
   baseUrlOverride?: string
   noTranslation?: boolean
+  directMode?: boolean
 }
 
 export class FlowcoreDataSource {
@@ -55,7 +56,7 @@ export class FlowcoreDataSource {
       const command = new TenantTranslateNameToIdCommand({
         tenant: this.options.dataSource.tenant,
       })
-      const result = await this.flowcoreClient.execute(command)
+      const result = await this.flowcoreClient.execute(command, this.options.directMode)
       this.tenantId = result.id
     }
     return this.tenantId
@@ -73,7 +74,7 @@ export class FlowcoreDataSource {
         tenant: this.options.dataSource.tenant,
         dataCore: this.options.dataSource.dataCore,
       })
-      const result = await this.flowcoreClient.execute(command)
+      const result = await this.flowcoreClient.execute(command, this.options.directMode)
       this.dataCoreId = result.id
     }
     return this.dataCoreId
@@ -91,7 +92,7 @@ export class FlowcoreDataSource {
         dataCoreId: await this.getDataCoreId(),
         flowType: this.options.dataSource.flowType,
       })
-      const result = await this.flowcoreClient.execute(command)
+      const result = await this.flowcoreClient.execute(command, this.options.directMode)
       this.flowTypeId = result.id
     }
     return this.flowTypeId
@@ -108,7 +109,7 @@ export class FlowcoreDataSource {
       const command = new EventTypeListCommand({
         flowTypeId: await this.getFlowTypeId(),
       })
-      const results = await this.flowcoreClient.execute(command)
+      const results = await this.flowcoreClient.execute(command, this.options.directMode)
       const eventTypeIds: string[] = []
       for (const eventType of this.eventTypes) {
         const found = results.find((result) => result.name === eventType)
@@ -126,7 +127,7 @@ export class FlowcoreDataSource {
     if (this.timeBuckets && !force) {
       return this.timeBuckets
     }
-    
+      
     let cursor: number | undefined
     const timeBuckets: string[] = []
     do {
@@ -137,6 +138,7 @@ export class FlowcoreDataSource {
           cursor: cursor || undefined,
           pageSize: 10_000,
         }),
+        this.options.directMode,
       )
       timeBuckets.push(...result.timeBuckets)
       cursor = result.nextCursor
@@ -186,6 +188,7 @@ export class FlowcoreDataSource {
         pageSize: amount,
         toEventId,
       }),
+      this.options.directMode,
     )
     return result.events
   }
