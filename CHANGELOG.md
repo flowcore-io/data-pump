@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/flowcore-io/data-pump/compare/v0.8.1...v0.8.2) (2025-04-02)
+
+
+### Bug Fixes
+
+* **dependencies:** :arrow_up: update @flowcore/sdk to version 1.24.4 ([986ff61](https://github.com/flowcore-io/data-pump/commit/986ff61f8cb4eb31e198b9873d1f085284562faa))
+
 ## [0.8.1](https://github.com/flowcore-io/data-pump/compare/v0.8.0...v0.8.1) (2025-04-02)
 
 
