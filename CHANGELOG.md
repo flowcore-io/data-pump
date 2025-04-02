@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/flowcore-io/data-pump/compare/v0.8.0...v0.8.1) (2025-04-02)
+
+
+### Bug Fixes
+
+* **flowcore-client:** :poop: add directMode parameter to execute method ([0cf88ba](https://github.com/flowcore-io/data-pump/commit/0cf88ba4e82092a992d0b68b4eff5207322961ea))
+
 ## [0.8.0](https://github.com/flowcore-io/data-pump/compare/v0.7.2...v0.8.0) (2025-04-02)
 
 
