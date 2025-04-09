@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.3](https://github.com/flowcore-io/data-pump/compare/v0.8.2...v0.8.3) (2025-04-09)
+
+
+### Bug Fixes
+
+* change runners ([cea7bdf](https://github.com/flowcore-io/data-pump/commit/cea7bdfac67ad5bda9643ad6b369b9a7630de4ae))
+* fix for stopat ([985d5fb](https://github.com/flowcore-io/data-pump/commit/985d5fb6f5afed3291216131583db0ac11a4384e))
+
 ## [0.8.2](https://github.com/flowcore-io/data-pump/compare/v0.8.1...v0.8.2) (2025-04-02)
 
 
