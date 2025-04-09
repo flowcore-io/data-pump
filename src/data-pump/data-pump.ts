@@ -223,14 +223,16 @@ export class FlowcoreDataPump {
 
       events.length && this.waiterEvents?.()
 
-      if (this.stopAtState?.timeBucket && this.bufferState.timeBucket >= this.stopAtState.timeBucket) {
+      this.bufferState.eventId = events[events.length - 1]?.eventId ?? this.bufferState.eventId
+
+      if (
+        this.stopAtState?.timeBucket && this.bufferState.timeBucket >= this.stopAtState.timeBucket && !events.length
+      ) {
         this.logger?.info("Stopping at stopAt state")
         await this.waitForBufferEmpty()
         this.stop()
         break
       }
-
-      this.bufferState.eventId = events[events.length - 1]?.eventId ?? this.bufferState.eventId
 
       if (events.length !== amountToFetch) {
         const timeBucket = await this.dataSource.getNextTimeBucket(this.bufferState.timeBucket)
