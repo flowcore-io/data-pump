@@ -3,6 +3,7 @@ import {
   EventListCommand,
   EventTypeListCommand,
   type FlowcoreClient,
+  type FlowcoreEvent,
   FlowTypeFetchCommand,
   TenantTranslateNameToIdCommand,
   TimeBucketListCommand,
@@ -29,23 +30,23 @@ export class FlowcoreDataSource {
     this.flowcoreClient = getFlowcoreClient(this.options.auth, this.options.baseUrlOverride)
   }
 
-  public get tenant() {
+  public get tenant(): string {
     return this.options.dataSource.tenant
   }
 
-  public get dataCore() {
+  public get dataCore(): string {
     return this.options.dataSource.dataCore
   }
 
-  public get flowType() {
+  public get flowType(): string {
     return this.options.dataSource.flowType
   }
 
-  public get eventTypes() {
+  public get eventTypes(): string[] {
     return this.options.dataSource.eventTypes
   }
 
-  public async getTenantId() {
+  public async getTenantId(): Promise<string> {
     if (this.tenantId) {
       return this.tenantId
     }
@@ -62,7 +63,7 @@ export class FlowcoreDataSource {
     return this.tenantId
   }
 
-  public async getDataCoreId() {
+  public async getDataCoreId(): Promise<string> {
     if (this.dataCoreId) {
       return this.dataCoreId
     }
@@ -80,7 +81,7 @@ export class FlowcoreDataSource {
     return this.dataCoreId
   }
 
-  public async getFlowTypeId() {
+  public async getFlowTypeId(): Promise<string> {
     if (this.flowTypeId) {
       return this.flowTypeId
     }
@@ -98,7 +99,7 @@ export class FlowcoreDataSource {
     return this.flowTypeId
   }
 
-  public async getEventTypeIds() {
+  public async getEventTypeIds(): Promise<string[]> {
     if (this.eventTypeIds) {
       return this.eventTypeIds
     }
@@ -123,11 +124,11 @@ export class FlowcoreDataSource {
     return this.eventTypeIds
   }
 
-  public async getTimeBuckets(force = false) {
+  public async getTimeBuckets(force = false): Promise<string[]> {
     if (this.timeBuckets && !force) {
       return this.timeBuckets
     }
-      
+
     let cursor: number | undefined
     const timeBuckets: string[] = []
     do {
@@ -177,7 +178,7 @@ export class FlowcoreDataSource {
     )
   }
 
-  public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string) {
+  public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string): Promise<FlowcoreEvent[]> {
     const eventTypeIds = await this.getEventTypeIds()
     const result = await this.flowcoreClient.execute(
       new EventListCommand({
