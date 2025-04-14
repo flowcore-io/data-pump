@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/flowcore-io/data-pump/compare/v0.8.3...v0.9.0) (2025-04-14)
+
+
+### Features
+
+* **data-pump:** :sparkles: allow data source override in create method ([4af96f1](https://github.com/flowcore-io/data-pump/commit/4af96f1daa75842abbe9eb9f241b8bc22cc76d53))
+
+
+### Bug Fixes
+
+* :rotating_light: fixed linting errors ([a0304a3](https://github.com/flowcore-io/data-pump/commit/a0304a3abf0f58cc53ecb584869bb4a94c6b5d66))
+
 ## [0.8.3](https://github.com/flowcore-io/data-pump/compare/v0.8.2...v0.8.3) (2025-04-09)
 
 
