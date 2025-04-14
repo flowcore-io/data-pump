@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/flowcore-io/data-pump/compare/v0.10.0...v0.11.0) (2025-04-14)
+
+
+### Features
+
+* **data-pump:** :sparkles: enhance FlowcoreDataSource with detailed JSDoc comments ([1e3308d](https://github.com/flowcore-io/data-pump/commit/1e3308d6c1aca7da47c96650f0b1e9ef9c8b7c8a))
+
 ## [0.10.0](https://github.com/flowcore-io/data-pump/compare/v0.9.0...v0.10.0) (2025-04-14)
 
 
