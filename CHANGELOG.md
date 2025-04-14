@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/flowcore-io/data-pump/compare/v0.9.0...v0.10.0) (2025-04-14)
+
+
+### Features
+
+* **data-pump:** :sparkles: export data source module ([6208e42](https://github.com/flowcore-io/data-pump/commit/6208e42bbf59e67d70235833a08d6e116b29dc60))
+
 ## [0.9.0](https://github.com/flowcore-io/data-pump/compare/v0.8.3...v0.9.0) (2025-04-14)
 
 
