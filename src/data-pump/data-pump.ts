@@ -93,8 +93,8 @@ export class FlowcoreDataPump {
     return this.running
   }
 
-  public static create(options: FlowcoreDataPumpOptions): FlowcoreDataPump {
-    const dataSource = new FlowcoreDataSource({
+  public static create(options: FlowcoreDataPumpOptions, dataSourceOverride?: FlowcoreDataSource): FlowcoreDataPump {
+    const dataSource = dataSourceOverride ?? new FlowcoreDataSource({
       auth: options.auth,
       dataSource: options.dataSource,
       baseUrlOverride: options.baseUrlOverride,
