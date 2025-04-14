@@ -3,7 +3,7 @@ import * as Nats from "nats"
 import { Subject } from "rxjs"
 import { FlowcoreDataSource } from "./data-source.ts"
 import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreLogger } from "./types.ts"
-import { noOpLogger } from "../lib/data-pump-create.ts"
+import { noOpLogger } from "./no-op-logger.ts"
 
 const DEFAULT_TIMEOUT_MS = 20_000
 
