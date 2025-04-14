@@ -75,6 +75,7 @@ export class FlowcoreDataPump {
   private buffer: FlowcoreDataPumpBufferItem[] = []
   private bufferState: FlowcoreDataPumpState
   private stopAtState?: FlowcoreDataPumpState
+  private isLive = false
 
   private constructor(
     private readonly dataSource: FlowcoreDataSource,
@@ -127,6 +128,7 @@ export class FlowcoreDataPump {
   }
 
   public async start(callback?: (error?: Error) => void): Promise<void> {
+    this.isLive = false
     if (this.running) {
       throw new Error("Data pump already running")
     }
@@ -245,9 +247,12 @@ export class FlowcoreDataPump {
           const previousTimeBucket = this.bufferState.timeBucket
           this.bufferState.timeBucket = format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
           if (previousTimeBucket === this.bufferState.timeBucket && !events.length) {
+            this.isLive = true
             this.logger?.debug("Going live...")
             this.abortController = new AbortController()
             await this.notifier.wait(this.abortController.signal)
+          } else if (this.isLive) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
           }
         }
       }
