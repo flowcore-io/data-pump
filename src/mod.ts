@@ -1,6 +1,3 @@
-export * from "./lib/data-pump.ts"
-export * from "./lib/data-pump-create.ts"
-
 export * from "./data-pump/data-pump.ts"
 export * from "./data-pump/data-source.ts"
 export * from "./data-pump/metrics.ts"
