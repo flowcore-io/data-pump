@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/flowcore-io/data-pump/compare/v0.12.0...v0.12.1) (2025-04-16)
+
+
+### Bug Fixes
+
+* fix pagination of events ([2ef1af8](https://github.com/flowcore-io/data-pump/commit/2ef1af835c1083560fdcb4521153f448ae56eed7))
+* fix pagination of events ([d0b3301](https://github.com/flowcore-io/data-pump/commit/d0b3301aef82c2ae7b357d8287fb4ed9cc4e6ef2))
+
 ## [0.12.0](https://github.com/flowcore-io/data-pump/compare/v0.11.0...v0.12.0) (2025-04-14)
 
 
