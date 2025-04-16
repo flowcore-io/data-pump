@@ -5,9 +5,9 @@
 import {
   DataCoreFetchCommand,
   EventListCommand,
+  type EventListOutput,
   EventTypeListCommand,
   type FlowcoreClient,
-  type FlowcoreEvent,
   FlowTypeFetchCommand,
   TenantTranslateNameToIdCommand,
   TimeBucketListCommand,
@@ -263,19 +263,25 @@ export class FlowcoreDataSource {
    * @param toEventId - Optional ID to stop at when retrieving events
    * @returns Promise that resolves to an array of Flowcore events
    */
-  public async getEvents(from: FlowcoreDataPumpState, amount: number, toEventId?: string): Promise<FlowcoreEvent[]> {
+  public async getEvents(
+    from: FlowcoreDataPumpState,
+    amount: number,
+    toEventId?: string,
+    cursor?: string,
+  ): Promise<EventListOutput> {
     const eventTypeIds = await this.getEventTypeIds()
     const result = await this.flowcoreClient.execute(
       new EventListCommand({
         tenant: this.options.dataSource.tenant,
         eventTypeId: eventTypeIds as [string, ...string[]],
         timeBucket: from.timeBucket,
-        afterEventId: from.eventId,
+        // afterEventId: from.eventId,
         pageSize: amount,
         toEventId,
+        cursor,
       }),
       this.options.directMode,
     )
-    return result.events
+    return result
   }
 }
