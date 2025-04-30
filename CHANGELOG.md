@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.2](https://github.com/flowcore-io/data-pump/compare/v0.12.1...v0.12.2) (2025-04-30)
+
+
+### Bug Fixes
+
+* **dependencies:** :arrow_up: update @flowcore/sdk to version 1.36.1 ([9386a69](https://github.com/flowcore-io/data-pump/commit/9386a691e2b602fbe9691667b80f6f88f176e2de))
+* **dependencies:** :sparkles: add @flowcore/sdk version 1.36.1 to deno.lock ([feb3c86](https://github.com/flowcore-io/data-pump/commit/feb3c86cdf30969a54635ff2914a80f46a45207c))
+
 ## [0.12.1](https://github.com/flowcore-io/data-pump/compare/v0.12.0...v0.12.1) (2025-04-16)
 
 
