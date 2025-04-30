@@ -9,6 +9,7 @@
     "jsr:@deno/dnt@~0.41.3": "0.41.3",
     "jsr:@deno/graph@~0.73.1": "0.73.1",
     "jsr:@denosaurs/plug@1": "1.0.6",
+    "jsr:@flowcore/sdk@^1.36.1": "1.36.1",
     "jsr:@flowcore/time-uuid@~0.1.1": "0.1.1",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/assert@0.221": "0.221.0",
@@ -93,6 +94,13 @@
         "jsr:@std/fmt@0.221",
         "jsr:@std/fs@0.221",
         "jsr:@std/path@0.221"
+      ]
+    },
+    "@flowcore/sdk@1.36.1": {
+      "integrity": "e121df4e1a06b10f26327a3eedab9cf42196d4d63eb7acd5ceb2a195dc663644",
+      "dependencies": [
+        "npm:@sinclair/typebox",
+        "npm:rxjs"
       ]
     },
     "@flowcore/time-uuid@0.1.1": {
