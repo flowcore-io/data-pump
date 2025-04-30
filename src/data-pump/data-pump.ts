@@ -69,12 +69,14 @@ interface FlowcoreDataPumpBufferItem {
 }
 
 export class FlowcoreDataPump {
+  private nextCursor?: string
   private running = false
   private restartTo?: FlowcoreDataPumpState
   private abortController?: AbortController
   private buffer: FlowcoreDataPumpBufferItem[] = []
   private bufferState: FlowcoreDataPumpState
   private stopAtState?: FlowcoreDataPumpState
+  private isLive = false
 
   private constructor(
     private readonly dataSource: FlowcoreDataSource,
@@ -127,10 +129,12 @@ export class FlowcoreDataPump {
   }
 
   public async start(callback?: (error?: Error) => void): Promise<void> {
+    this.isLive = false
     if (this.running) {
       throw new Error("Data pump already running")
     }
     this.running = true
+    this.nextCursor = undefined
     this.updateMetricsGauges()
     const currentState = await this.stateManager.getState()
     const timeBucket = currentState
@@ -210,15 +214,24 @@ export class FlowcoreDataPump {
       }
 
       this.logger?.debug(
-        `fetching ${amountToFetch} events from ${this.bufferState.timeBucket}(${this.bufferState.eventId})`,
+        `fetching ${amountToFetch} events from ${this.bufferState.timeBucket}(${this.nextCursor})`,
       )
-      const events = await this.dataSource.getEvents(this.bufferState, amountToFetch, this.stopAtState?.eventId)
+
+      const { events, nextCursor } = await this.dataSource.getEvents(
+        this.bufferState,
+        amountToFetch,
+        this.stopAtState?.eventId,
+        this.nextCursor,
+      )
+
       if (!this.running) {
         break
       }
+
       this.logger?.debug(`fetched ${events.length} events`)
 
       this.buffer.push(...events.map((event) => ({ event, status: "open" as const, deliveryCount: 0 })))
+      this.nextCursor = nextCursor
       this.updateMetricsGauges()
 
       events.length && this.waiterEvents?.()
@@ -234,7 +247,7 @@ export class FlowcoreDataPump {
         break
       }
 
-      if (events.length !== amountToFetch) {
+      if (!this.nextCursor) {
         const timeBucket = await this.dataSource.getNextTimeBucket(this.bufferState.timeBucket)
         if (!this.running) {
           break
@@ -245,9 +258,12 @@ export class FlowcoreDataPump {
           const previousTimeBucket = this.bufferState.timeBucket
           this.bufferState.timeBucket = format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
           if (previousTimeBucket === this.bufferState.timeBucket && !events.length) {
+            this.isLive = true
             this.logger?.debug("Going live...")
             this.abortController = new AbortController()
             await this.notifier.wait(this.abortController.signal)
+          } else if (this.isLive) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
           }
         }
       }
@@ -257,6 +273,7 @@ export class FlowcoreDataPump {
       await this.dataSource.getTimeBuckets(true)
       this.restartTo.timeBucket = (await this.dataSource.getClosestTimeBucket(this.restartTo.timeBucket)) ??
         format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
+      this.nextCursor = undefined
       this.bufferState = this.restartTo
       this.restartTo = undefined
       this.running = true

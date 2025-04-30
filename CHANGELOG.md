@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.12.1](https://github.com/flowcore-io/data-pump/compare/v0.12.0...v0.12.1) (2025-04-16)
+
+
+### Bug Fixes
+
+* fix pagination of events ([2ef1af8](https://github.com/flowcore-io/data-pump/commit/2ef1af835c1083560fdcb4521153f448ae56eed7))
+* fix pagination of events ([d0b3301](https://github.com/flowcore-io/data-pump/commit/d0b3301aef82c2ae7b357d8287fb4ed9cc4e6ef2))
+
+## [0.12.0](https://github.com/flowcore-io/data-pump/compare/v0.11.0...v0.12.0) (2025-04-14)
+
+
+### Features
+
+* remove old datapump code ([d940e25](https://github.com/flowcore-io/data-pump/commit/d940e25bf9e5c67a6609d33f741c23b3dad3ca23))
+
+
+### Bug Fixes
+
+* add 1 sec delay when rechecking for events in livemode ([024a9e0](https://github.com/flowcore-io/data-pump/commit/024a9e09dbd9998e36257f29c154d50ed82ff7a4))
+* add no op logger ([fd83978](https://github.com/flowcore-io/data-pump/commit/fd83978275b1102b80c853dd53c00764b747a9c7))
+
 ## [0.11.0](https://github.com/flowcore-io/data-pump/compare/v0.10.0...v0.11.0) (2025-04-14)
 
 
