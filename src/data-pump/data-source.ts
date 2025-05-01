@@ -275,7 +275,7 @@ export class FlowcoreDataSource {
         tenant: this.options.dataSource.tenant,
         eventTypeId: eventTypeIds as [string, ...string[]],
         timeBucket: from.timeBucket,
-        // afterEventId: from.eventId,
+        afterEventId: !cursor ? from.eventId : undefined,
         pageSize: amount,
         toEventId,
         cursor,
