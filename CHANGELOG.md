@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/flowcore-io/data-pump/compare/v0.12.2...v0.12.3) (2025-05-01)
+
+
+### Bug Fixes
+
+* fix for fetch events ([b3444db](https://github.com/flowcore-io/data-pump/commit/b3444db7d95bf61114c2c593825322e5e7925b07))
+
 ## [0.12.2](https://github.com/flowcore-io/data-pump/compare/v0.12.1...v0.12.2) (2025-04-30)
 
 
