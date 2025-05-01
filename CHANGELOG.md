@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/flowcore-io/data-pump/compare/v0.12.4...v0.13.0) (2025-05-01)
+
+
+### Features
+
+* **dependencies:** :sparkles: update @flowcore/sdk to version 1.38.0 added include sensitive data functionality ([0bfc953](https://github.com/flowcore-io/data-pump/commit/0bfc953e82ca1e704c4d2d89a5783bebb69cbdbb))
+
 ## [0.12.4](https://github.com/flowcore-io/data-pump/compare/v0.12.3...v0.12.4) (2025-05-01)
 
 
