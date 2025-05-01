@@ -108,6 +108,7 @@ export class FlowcoreDataSource {
       const result = await this.flowcoreClient.execute(command, this.options.directMode)
       this.tenantId = result.id
     }
+
     return this.tenantId
   }
 
@@ -268,6 +269,7 @@ export class FlowcoreDataSource {
     amount: number,
     toEventId?: string,
     cursor?: string,
+    includeSensitiveData = false,
   ): Promise<EventListOutput> {
     const eventTypeIds = await this.getEventTypeIds()
     const result = await this.flowcoreClient.execute(
@@ -279,6 +281,7 @@ export class FlowcoreDataSource {
         pageSize: amount,
         toEventId,
         cursor,
+        includeSensitiveData,
       }),
       this.options.directMode,
     )

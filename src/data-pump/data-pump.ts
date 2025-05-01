@@ -43,6 +43,7 @@ export interface FlowcoreDataPumpOptions {
   bufferSize?: number
   maxRedeliveryCount?: number
   achknowledgeTimeoutMs?: number
+  includeSensitiveData?: boolean
   processor?: FlowcoreDataPumpProcessor
   notifier?: FlowcoreDataPumpNotifierOptions
   logger?: FlowcoreLogger
@@ -57,6 +58,7 @@ interface FlowcoreDataPumpInnerOptions {
   bufferThreshold: number
   maxRedeliveryCount: number
   achknowledgeTimeoutMs: number
+  includeSensitiveData: boolean
   processor?: FlowcoreDataPumpProcessor
   stopAt?: Date
 }
@@ -121,6 +123,7 @@ export class FlowcoreDataPump {
         bufferThreshold: Math.ceil((options.bufferSize ?? 1000) * 0.1),
         maxRedeliveryCount: options.maxRedeliveryCount ?? 3,
         achknowledgeTimeoutMs: options.achknowledgeTimeoutMs ?? 5_000,
+        includeSensitiveData: options.includeSensitiveData ?? false,
         processor: options.processor,
         stopAt: options.stopAt,
       },
@@ -222,6 +225,7 @@ export class FlowcoreDataPump {
         amountToFetch,
         this.stopAtState?.eventId,
         this.nextCursor,
+        this.options.includeSensitiveData,
       )
 
       if (!this.running) {
