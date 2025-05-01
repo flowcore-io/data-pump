@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.4](https://github.com/flowcore-io/data-pump/compare/v0.12.3...v0.12.4) (2025-05-01)
+
+
+### Bug Fixes
+
+* update sdk ([339d28d](https://github.com/flowcore-io/data-pump/commit/339d28d5d0700971221c44990e86d51004fd4c7d))
+
 ## [0.12.3](https://github.com/flowcore-io/data-pump/compare/v0.12.2...v0.12.3) (2025-05-01)
 
 
