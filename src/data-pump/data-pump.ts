@@ -68,7 +68,7 @@ interface FlowcoreDataPumpBufferItem {
   status: "open" | "reserved"
   deliveryCount: number
   deliveryId?: string
-  timeoutId?: number
+  timeoutId?: ReturnType<typeof setTimeout>
 }
 
 export class FlowcoreDataPump {
@@ -344,7 +344,7 @@ export class FlowcoreDataPump {
       return
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
-    const acknowledgedTimeoutIds = new Set<number>()
+    const acknowledgedTimeoutIds = new Set<ReturnType<typeof setTimeout>>()
 
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
@@ -382,7 +382,7 @@ export class FlowcoreDataPump {
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     const failedEvents: FlowcoreEvent[] = []
-    const failedTimeoutIds = new Set<number>()
+    const failedTimeoutIds = new Set<ReturnType<typeof setTimeout>>()
 
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
