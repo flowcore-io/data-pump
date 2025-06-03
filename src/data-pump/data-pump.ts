@@ -68,7 +68,6 @@ interface FlowcoreDataPumpBufferItem {
   status: "open" | "reserved"
   deliveryCount: number
   deliveryId?: string
-  timeoutId?: ReturnType<typeof setTimeout>
 }
 
 export class FlowcoreDataPump {
@@ -115,11 +114,6 @@ export class FlowcoreDataPump {
       directMode: options.directMode,
       noTranslation: options.noTranslation,
     })
-
-    // Calculate acknowledgment timeout based on concurrency if not explicitly set
-    const concurrency = options.processor?.concurrency ?? 1
-    const defaultAckTimeout = Math.max(10_000, concurrency * 2_000) // At least 10s, scale with concurrency
-
     return new FlowcoreDataPump(
       dataSource,
       notifier,
@@ -128,7 +122,7 @@ export class FlowcoreDataPump {
         bufferSize: options.bufferSize ?? 1000,
         bufferThreshold: Math.ceil((options.bufferSize ?? 1000) * 0.1),
         maxRedeliveryCount: options.maxRedeliveryCount ?? 3,
-        achknowledgeTimeoutMs: options.achknowledgeTimeoutMs ?? defaultAckTimeout,
+        achknowledgeTimeoutMs: options.achknowledgeTimeoutMs ?? 5_000,
         includeSensitiveData: options.includeSensitiveData ?? false,
         processor: options.processor,
         stopAt: options.stopAt,
@@ -301,15 +295,13 @@ export class FlowcoreDataPump {
     }
     const events: FlowcoreEvent[] = []
     const deliveryId = crypto.randomUUID()
-    const reservedBufferItems: FlowcoreDataPumpBufferItem[] = []
-
+    
     for (const event of this.buffer) {
       if (event.status === "open") {
         event.status = "reserved"
         event.deliveryId = deliveryId
         event.deliveryCount++
         events.push(event.event)
-        reservedBufferItems.push(event)
         this.incMetricsCounter("pulled", event.event.eventType, JSON.stringify(event.event).length)
         if (events.length === amount) {
           break
@@ -324,17 +316,12 @@ export class FlowcoreDataPump {
 
     this.updateMetricsGauges()
 
-    const timeoutId = setTimeout(() => {
+    setTimeout(() => {
       this.reOpen(
         events.map((event) => event.eventId),
         deliveryId,
       )
     }, this.options.achknowledgeTimeoutMs)
-
-    // Store timeout ID in all reserved items so we can clear it on acknowledgment
-    for (const item of reservedBufferItems) {
-      item.timeoutId = timeoutId
-    }
 
     return events
   }
@@ -344,24 +331,13 @@ export class FlowcoreDataPump {
       return
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
-    const acknowledgedTimeoutIds = new Set<ReturnType<typeof setTimeout>>()
-
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("acknowledged", event.event.eventType, 1)
-        // Collect timeout IDs to clear them
-        if (event.timeoutId !== undefined) {
-          acknowledgedTimeoutIds.add(event.timeoutId)
-        }
         return false
       }
       return true
     })
-
-    // Clear timeouts for acknowledged events to prevent unnecessary reOpen calls
-    for (const timeoutId of acknowledgedTimeoutIds) {
-      clearTimeout(timeoutId)
-    }
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
@@ -382,26 +358,14 @@ export class FlowcoreDataPump {
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     const failedEvents: FlowcoreEvent[] = []
-    const failedTimeoutIds = new Set<ReturnType<typeof setTimeout>>()
-
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
         failedEvents.push(event.event)
-        // Collect timeout IDs to clear them
-        if (event.timeoutId !== undefined) {
-          failedTimeoutIds.add(event.timeoutId)
-        }
         return false
       }
       return true
     })
-
-    // Clear timeouts for failed events
-    for (const timeoutId of failedTimeoutIds) {
-      clearTimeout(timeoutId)
-    }
-
     this.logger?.info(`Failed ${failedEvents.length} events`)
     void this.options.processor?.failedHandler?.(failedEvents)
 
@@ -432,7 +396,6 @@ export class FlowcoreDataPump {
       }
       event.status = "open"
       event.deliveryId = undefined
-      event.timeoutId = undefined
       reopenedEvents.push(event.event)
       return true
     })
