@@ -115,11 +115,11 @@ export class FlowcoreDataPump {
       directMode: options.directMode,
       noTranslation: options.noTranslation,
     })
-    
+
     // Calculate acknowledgment timeout based on concurrency if not explicitly set
     const concurrency = options.processor?.concurrency ?? 1
     const defaultAckTimeout = Math.max(10_000, concurrency * 2_000) // At least 10s, scale with concurrency
-    
+
     return new FlowcoreDataPump(
       dataSource,
       notifier,
@@ -302,7 +302,7 @@ export class FlowcoreDataPump {
     const events: FlowcoreEvent[] = []
     const deliveryId = crypto.randomUUID()
     const reservedBufferItems: FlowcoreDataPumpBufferItem[] = []
-    
+
     for (const event of this.buffer) {
       if (event.status === "open") {
         event.status = "reserved"
@@ -330,7 +330,7 @@ export class FlowcoreDataPump {
         deliveryId,
       )
     }, this.options.achknowledgeTimeoutMs)
-    
+
     // Store timeout ID in all reserved items so we can clear it on acknowledgment
     for (const item of reservedBufferItems) {
       item.timeoutId = timeoutId
@@ -345,7 +345,7 @@ export class FlowcoreDataPump {
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     const acknowledgedTimeoutIds = new Set<number>()
-    
+
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("acknowledged", event.event.eventType, 1)
@@ -357,7 +357,7 @@ export class FlowcoreDataPump {
       }
       return true
     })
-    
+
     // Clear timeouts for acknowledged events to prevent unnecessary reOpen calls
     for (const timeoutId of acknowledgedTimeoutIds) {
       clearTimeout(timeoutId)
@@ -383,7 +383,7 @@ export class FlowcoreDataPump {
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     const failedEvents: FlowcoreEvent[] = []
     const failedTimeoutIds = new Set<number>()
-    
+
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
@@ -396,12 +396,12 @@ export class FlowcoreDataPump {
       }
       return true
     })
-    
+
     // Clear timeouts for failed events
     for (const timeoutId of failedTimeoutIds) {
       clearTimeout(timeoutId)
     }
-    
+
     this.logger?.info(`Failed ${failedEvents.length} events`)
     void this.options.processor?.failedHandler?.(failedEvents)
 

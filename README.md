@@ -44,7 +44,8 @@ await dataPump.start((error?: Error) => {
 
 ### Concurrency and Acknowledgment Timeout
 
-When using higher concurrency values, the data pump automatically scales the acknowledgment timeout to prevent events from being prematurely failed due to processing time. The default acknowledgment timeout is calculated as:
+When using higher concurrency values, the data pump automatically scales the acknowledgment timeout to prevent events
+from being prematurely failed due to processing time. The default acknowledgment timeout is calculated as:
 
 ```ts
 const defaultAckTimeout = Math.max(10_000, concurrency * 2_000) // At least 10s, scale with concurrency
@@ -53,7 +54,7 @@ const defaultAckTimeout = Math.max(10_000, concurrency * 2_000) // At least 10s,
 For example:
 
 - `concurrency: 1` → `achknowledgeTimeoutMs: 10_000` (10 seconds)
-- `concurrency: 10` → `achknowledgeTimeoutMs: 20_000` (20 seconds)  
+- `concurrency: 10` → `achknowledgeTimeoutMs: 20_000` (20 seconds)
 - `concurrency: 50` → `achknowledgeTimeoutMs: 100_000` (100 seconds)
 
 You can override this by explicitly setting `achknowledgeTimeoutMs` in the options.
