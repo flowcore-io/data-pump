@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/flowcore-io/data-pump/compare/v0.13.0...v0.14.0) (2025-06-03)
+
+
+### Features
+
+* **data-pump:** :sparkles: add acknowledgment timeout scaling and timeout management ([64fdc7e](https://github.com/flowcore-io/data-pump/commit/64fdc7e099820922d3ae5f8eee42308d427069dc))
+
+
+### Bug Fixes
+
+* **data-pump:** :art: update timeoutId type to use ReturnType of setTimeout ([96ce40c](https://github.com/flowcore-io/data-pump/commit/96ce40c0d2ecdf564a5d63b12a6f948b56f4ab41))
+* **deno:** :art: update deno.lock version and format deno.json ([80f634e](https://github.com/flowcore-io/data-pump/commit/80f634ef88626ab9476890076e96212611ebb1c0))
+
 ## [0.13.0](https://github.com/flowcore-io/data-pump/compare/v0.12.4...v0.13.0) (2025-05-01)
 
 
