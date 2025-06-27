@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/flowcore-io/data-pump/compare/v0.15.0...v0.15.1) (2025-06-27)
+
+
+### Bug Fixes
+
+* add finally failed handler ([e719e8d](https://github.com/flowcore-io/data-pump/commit/e719e8d29493c56d58aa799f6932d66476c0e2e5))
+
 ## [0.15.0](https://github.com/flowcore-io/data-pump/compare/v0.14.0...v0.15.0) (2025-06-03)
 
 
