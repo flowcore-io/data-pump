@@ -79,6 +79,7 @@ export class FlowcoreDataPump {
   private bufferState: FlowcoreDataPumpState
   private stopAtState?: FlowcoreDataPumpState
   private isLive = false
+  private finallyFailedHandler?: (events: FlowcoreEvent[]) => Promise<void> | void
 
   private constructor(
     private readonly dataSource: FlowcoreDataSource,
@@ -295,7 +296,7 @@ export class FlowcoreDataPump {
     }
     const events: FlowcoreEvent[] = []
     const deliveryId = crypto.randomUUID()
-    
+
     for (const event of this.buffer) {
       if (event.status === "open") {
         event.status = "reserved"
@@ -324,6 +325,10 @@ export class FlowcoreDataPump {
     }, this.options.achknowledgeTimeoutMs)
 
     return events
+  }
+
+  public onFinalyFailed(handler: (events: FlowcoreEvent[]) => Promise<void> | void) {
+    this.finallyFailedHandler = handler
   }
 
   public async acknowledge(eventIds: string[]) {
@@ -413,6 +418,7 @@ export class FlowcoreDataPump {
 
     this.logger?.info(`Failed ${failedEvents.length} events`)
     void this.options.processor?.failedHandler?.(failedEvents)
+    void this.finallyFailedHandler?.(failedEvents)
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
