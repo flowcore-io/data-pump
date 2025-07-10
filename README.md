@@ -6,7 +6,7 @@ real-time event processing with automatic retry, buffering, and state management
 [![JSR](https://jsr.io/badges/@flowcore/data-pump)](https://jsr.io/@flowcore/data-pump)
 [![NPM Version](https://img.shields.io/npm/v/@flowcore/data-pump)](https://www.npmjs.com/package/@flowcore/data-pump)
 
-## 🚀 Quick Start
+## Example Setup
 
 ```typescript
 import { FlowcoreDataPump } from "@flowcore/data-pump"
@@ -31,6 +31,17 @@ const dataPump = FlowcoreDataPump.create({
       console.log(`Processing ${events.length} events`)
       // Your event processing logic here
     },
+  },
+  notifier: { type: "websocket" },
+
+  directMode: false,
+  noTranslation: false,
+  bufferSize: 100,
+  logger: {
+    debug: (msg) => console.log(`[DEBUG] ${msg}`),
+    info: (msg) => console.log(`[INFO] ${msg}`),
+    warn: (msg) => console.warn(`[WARN] ${msg}`),
+    error: (msg) => console.error(`[ERROR] ${msg}`),
   },
 })
 
@@ -179,6 +190,9 @@ auth: {
   apiKeyId: "your-api-key-id"
 }
 ```
+
+> **💡 Important:** Make sure your API key has sufficient permissions. The key should have **COLLABORATOR** role or
+> equivalent permissions to access streaming operations.
 
 ### OIDC/Bearer Token Authentication
 
@@ -410,6 +424,31 @@ auth: {
 
 // Override base URL for different environments
 baseUrlOverride: "https://api.staging.flowcore.io"
+```
+
+**Authentication/Permission Issues**
+
+If you're getting authentication errors or access denied:
+
+- **API Key Permissions**: Ensure your API key has **COLLABORATOR** role or higher in your Flowcore tenant
+- **Scope Access**: Verify the key has access to the specific tenant, data core, and flow types you're trying to access
+- **Key Validity**: Check that your API key hasn't expired and is still active
+
+```typescript
+// Test your authentication
+const testAuth = async () => {
+  try {
+    // This should work if your API key has correct permissions
+    const dataPump = FlowcoreDataPump.create({
+      auth: { apiKey: "your-key", apiKeyId: "your-key-id" },
+      dataSource: { tenant: "test", dataCore: "test", flowType: "test", eventTypes: ["test"] },
+      stateManager: { getState: () => null, setState: () => {} },
+    })
+    console.log("Authentication configured successfully")
+  } catch (error) {
+    console.error("Authentication issue:", error.message)
+  }
+}
 ```
 
 **Performance Issues**
