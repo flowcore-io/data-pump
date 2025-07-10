@@ -12,15 +12,16 @@ real-time event processing with automatic retry, buffering, and state management
 import { FlowcoreDataPump } from "@flowcore/data-pump"
 
 const dataPump = FlowcoreDataPump.create({
+  // make sure that api key has sufficient permissions to access streaming operations (COLLABORATOR is an example of a role that has sufficient permissions)
   auth: {
     apiKey: "your-api-key",
     apiKeyId: "your-api-key-id",
   },
   dataSource: {
-    tenant: "your-tenant",
-    dataCore: "your-data-core",
-    flowType: "your-flow-type",
-    eventTypes: ["entity.created.0", "entity.updated.0", "entity.deleted.0"],
+    tenant: "your-tenant-name",
+    dataCore: "your-data-core-name",
+    flowType: "your-flow-type-name",
+    eventTypes: ["event-type-name-1", "event-type-name-2", "event-type-name-3"],
   },
   stateManager: {
     getState: () => null, // Start from latest
@@ -34,8 +35,8 @@ const dataPump = FlowcoreDataPump.create({
   },
   notifier: { type: "websocket" },
 
-  directMode: false,
-  noTranslation: false,
+  directMode: false, // set to true if you have a dedicated cluster
+  noTranslation: false, // set to true if you have a dedicated cluster
   bufferSize: 100,
   logger: {
     debug: (msg) => console.log(`[DEBUG] ${msg}`),
