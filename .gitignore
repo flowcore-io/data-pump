@@ -4,3 +4,5 @@ tmp/
 src/local/
 npm/
 coverage/
+
+src/test/

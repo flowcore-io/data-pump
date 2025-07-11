@@ -300,22 +300,22 @@ notifier: {
 
 ## ⚙️ Configuration Reference
 
-| Option                  | Type                              | Default      | Description                                                        |
-| ----------------------- | --------------------------------- | ------------ | ------------------------------------------------------------------ |
-| `auth`                  | `FlowcoreDataPumpAuth`            | **Required** | Authentication configuration (API key or Bearer token)             |
-| `dataSource`            | `FlowcoreDataPumpDataSource`      | **Required** | Data source configuration (tenant, dataCore, flowType, eventTypes) |
-| `stateManager`          | `FlowcoreDataPumpStateManager`    | **Required** | State persistence configuration                                    |
-| `bufferSize`            | `number`                          | `1000`       | Maximum events to buffer in memory                                 |
-| `maxRedeliveryCount`    | `number`                          | `3`          | Max retry attempts before marking event as failed                  |
-| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Timeout for event acknowledgment                                   |
-| `includeSensitiveData`  | `boolean`                         | `false`      | Include sensitive data in events                                   |
-| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration                                 |
-| `notifier`              | `FlowcoreDataPumpNotifierOptions` | `websocket`  | Notification method configuration                                  |
-| `logger`                | `FlowcoreLogger`                  | `undefined`  | Custom logger implementation                                       |
-| `stopAt`                | `Date`                            | `undefined`  | Stop processing at specific date (for historical processing)       |
-| `baseUrlOverride`       | `string`                          | `undefined`  | Override Flowcore API base URL                                     |
-| `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation                                        |
-| `directMode`            | `boolean`                         | `false`      | Use direct API mode                                                |
+| Option                  | Type                              | Default      | Description                                                                                                                                                                                                     |
+| ----------------------- | --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`                  | `FlowcoreDataPumpAuth`            | **Required** | Authentication configuration (API key or Bearer token)                                                                                                                                                          |
+| `dataSource`            | `FlowcoreDataPumpDataSource`      | **Required** | Data source configuration (tenant, dataCore, flowType, eventTypes)                                                                                                                                              |
+| `stateManager`          | `FlowcoreDataPumpStateManager`    | **Required** | State persistence configuration                                                                                                                                                                                 |
+| `bufferSize`            | `number`                          | `1000`       | Maximum events to buffer in memory                                                                                                                                                                              |
+| `maxRedeliveryCount`    | `number`                          | `3`          | Max retry attempts before marking event as failed                                                                                                                                                               |
+| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Timeout for event acknowledgment                                                                                                                                                                                |
+| `includeSensitiveData`  | `boolean`                         | `false`      | Include sensitive data in events                                                                                                                                                                                |
+| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration                                                                                                                                                                              |
+| `notifier`              | `FlowcoreDataPumpNotifierOptions` | `websocket`  | Notification method configuration                                                                                                                                                                               |
+| `logger`                | `FlowcoreLogger`                  | `undefined`  | Custom logger implementation                                                                                                                                                                                    |
+| `stopAt`                | `Date`                            | `undefined`  | Stop processing at specific date (for historical processing)                                                                                                                                                    |
+| `baseUrlOverride`       | `string`                          | `undefined`  | Override Flowcore API base URL                                                                                                                                                                                  |
+| `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation. This is mostly used in dedicated clusters. And for performance reasons.                                                                                                            |
+| `directMode`            | `boolean`                         | `false`      | Enables direct API execution mode, bypassing intermediary gateways and automatic name-to-ID translations; recommended for dedicated Flowcore clusters to reduce latency (often used with `noTranslation: true`) |
 
 ## 📊 Monitoring & Metrics
 
@@ -395,6 +395,13 @@ process.on("SIGINT", async () => {
   process.exit(0)
 })
 ```
+
+#### Understanding Direct Mode
+
+Direct mode optimizes API calls by skipping certain proxy layers and assuming inputs are already in raw ID format (e.g.,
+UUIDs for tenants). This is particularly useful in private or dedicated Flowcore environments for better performance. If
+enabled without a compatible setup, you may encounter routing or authentication errors. Always combine with
+`noTranslation: true` when providing IDs directly in your `dataSource` configuration.
 
 ### Restart from Specific Position
 
@@ -521,20 +528,3 @@ logger: {
   error: console.error
 }
 ```
-
-## 📚 API Reference
-
-For complete API documentation, see the [generated TypeScript definitions](./src/data-pump/types.ts).
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes and add tests
-4. Run tests: `deno test`
-5. Run linting: `deno lint`
-6. Submit a pull request
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
