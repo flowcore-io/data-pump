@@ -29,7 +29,7 @@ const dataPump = FlowcoreDataPump.create({
     getState: () => null, // Start in live mode
     setState: (state) => console.log("Position:", state),
   },
-  processor: {
+  processor: { // use this for automatic event lifecycle management
     handler: async (events) => {
       console.log(`Processing ${events.length} events`)
       // Your event processing logic here
@@ -50,7 +50,7 @@ const dataPump = FlowcoreDataPump.create({
 await dataPump.start()
 ```
 
-## 📦 Installation
+## Installation
 
 ### Node.js
 
@@ -62,31 +62,132 @@ npm install @flowcore/data-pump
 import { FlowcoreDataPump } from "@flowcore/data-pump"
 ```
 
-## 🔑 Key Concepts
+## Key Concepts
 
 ### **Time Buckets**
 
-Events are organized in hourly time buckets (format: `yyyyMMddHH0000`). This enables:
+Events are organized in **hourly time buckets** using the format `yyyyMMddHH0000`:
 
-- Precise resumption from any point in time
-- Efficient historical data processing
-- Handling of catch-up scenarios
+```
+20240315140000 = March 15, 2024, 14:00 (2 PM)
+20240315150000 = March 15, 2024, 15:00 (3 PM)  
+20240315160000 = March 15, 2024, 16:00 (4 PM)
+```
+
+**Why time buckets matter:**
+
+- 📍 **Precise positioning**: Resume from any hour in your event history
+- ⚡ **Efficient queries**: Flowcore can quickly locate events within time ranges
+- 🔄 **Catch-up processing**: Process months of historical data in sequence
+- 🎯 **Debugging**: Jump to specific time periods when issues occurred
 
 ### **State Management**
 
-The data pump tracks its position using time buckets and event IDs, allowing:
+The pump **tracks its exact position** using time buckets + event IDs:
 
-- **Crash recovery**: Resume exactly where you left off
-- **Horizontal scaling**: Multiple instances with shared state
-- **Historical processing**: Process events from specific time ranges
+```typescript
+// Current position in event stream
+{
+  timeBucket: "20240315140000",           // Currently processing 2 PM hour
+  eventId: "abc-123-def-456"              // Last successfully processed event
+}
+```
+
+**Critical capabilities:**
+
+- **Crash recovery**: Restart exactly where you left off (no duplicate processing)
+- **Horizontal scaling**: Multiple instances can coordinate using shared database state
+- **Historical processing**: Start from any point in time (hours, days, months ago)
+- **Deployment safety**: Updates don't lose processing progress
+
+### **Event Lifecycle & Processing Modes**
+
+Understanding how events flow through the system:
+
+#### **Push Mode Flow (Automatic)**
+
+```
+Fetch → Buffer → Reserve → Process → ✅ Acknowledge (or ❌ Retry)
+         ↑                    ↑                 ↑
+    You configure         Pump handles     You write business logic
+```
+
+#### **Pull Mode Flow (Manual)**
+
+```
+Fetch → Buffer → YOU Reserve → YOU Process → YOU Acknowledge/Fail
+         ↑           ↑              ↑              ↑
+    Pump handles   You control   You control   You control
+```
 
 ### **Buffer Management**
 
-Events are buffered locally with configurable sizes to handle:
+Local **in-memory event queue** between fetching and processing:
 
-- **Backpressure**: When processing is slower than event arrival
-- **Batch processing**: Process multiple events together efficiently
+```typescript
+Buffer: [Event1, Event2, Event3, Event4, Event5] 
+         ↑                              ↑
+    Processing these              Fetching more
+```
+
+**Handles key scenarios:**
+
+- **Backpressure**: When processing is slower than event arrival rate
+- **Batch processing**: Group multiple events for efficient processing
 - **Flow control**: Automatic throttling based on buffer capacity
+- **Memory protection**: Prevents unlimited memory growth during slow processing
+
+### **Live vs Historical Processing**
+
+Two fundamental processing patterns:
+
+#### **Live Mode**
+
+- **When**: `stateManager.getState()` returns `null`
+- **Behavior**: Process new events as they arrive (real-time)
+- **Use case**: Production event processing, real-time analytics
+
+#### **Historical Mode**
+
+- **When**: `stateManager.getState()` returns `{ timeBucket, eventId }`
+- **Behavior**: Process events from specific point in time
+- **Use case**: Backfill data, debugging, data migration, replaying scenarios
+
+### **⚡ Concurrency & Parallel Processing**
+
+Control how many events process simultaneously:
+
+```typescript
+processor: {
+  concurrency: 5,  // Process up to 5 events in parallel
+  handler: async (events) => {
+    // This batch could contain 1-5 events
+    // All processed in parallel for efficiency
+  }
+}
+```
+
+**Performance considerations:**
+
+- **Higher concurrency**: Faster processing, more resource usage
+- **Lower concurrency**: More controlled, better for external API limits
+- **Optimal range**: Usually 5-20 for most applications
+
+### **🔧 Failure Handling & Retries**
+
+Automatic resilience for production systems:
+
+```
+Event fails → Retry 1 → Retry 2 → Retry 3 → Permanent failure
+     ↓           ↓         ↓         ↓            ↓
+ Log error   Log retry  Log retry  Log retry   failedHandler()
+```
+
+**Configurable behavior:**
+
+- `maxRedeliveryCount`: How many retries before giving up
+- `failedHandler`: Your code to handle permanently failed events
+- **Exponential backoff**: Automatic delays between retries
 
 ## Usage Patterns
 
@@ -106,7 +207,7 @@ const dataPump = FlowcoreDataPump.create({
   processor: {
     concurrency: 5,
     handler: async (events) => {
-      // 🎯 You only write business logic here
+      // You only write business logic here
       for (const event of events) {
         await processEvent(event)
       }
@@ -638,88 +739,16 @@ dataPump.restart(
 #### Pull Mode Methods (Manual Processing)
 
 ```typescript
-// Reserve events for processing (pull mode only)
-const events = await dataPump.reserve(10) // Reserve 10 events
+const events = await dataPump.reserve(10) // Mark 10 events as reserved for processing
 
-// Acknowledge successfully processed events
 await dataPump.acknowledge(events.map((e) => e.eventId))
 
-// Mark events as failed (will trigger retries)
 await dataPump.fail(["event-id-1", "event-id-2"])
 
 // Handle events that permanently failed (exceeded retry limit)
 dataPump.onFinalyFailed(async (failedEvents) => {
   console.log(`${failedEvents.length} events permanently failed`)
-  // Log to external system, send alerts, etc.
 })
-```
-
-### Historical Processing Patterns
-
-#### Pattern 1: Data Discovery
-
-```typescript
-const dataSource = new FlowcoreDataSource(config)
-
-// Discover available data
-const timeBuckets = await dataSource.getTimeBuckets()
-console.log(`📊 Data range: ${timeBuckets[0]} to ${timeBuckets[timeBuckets.length - 1]}`)
-
-// Peek at some events
-const sample = await dataSource.getEvents(
-  { timeBucket: timeBuckets[0] },
-  5, // Just get 5 events to see structure
-)
-console.log("📝 Sample events:", sample.events.slice(0, 2))
-```
-
-#### Pattern 2: Controlled Historical Replay
-
-```typescript
-const dataPump = FlowcoreDataPump.create({
-  // ... auth, dataSource config
-  stateManager: {
-    getState: async () => {
-      const timeBuckets = await dataSource.getTimeBuckets()
-      if (timeBuckets.length === 0) return null
-
-      // Start from specific time bucket
-      return { timeBucket: timeBuckets[0] }
-    },
-    setState: (state) => console.log(`📍 Position: ${state.timeBucket}`),
-  },
-})
-
-// Stop after processing specific amount or time
-const stopDate = new Date("2024-01-01T12:00:00Z")
-dataPump.restart({ timeBucket: "20240101000000" }, stopDate)
-```
-
-#### Pattern 3: Event Range Processing
-
-```typescript
-async function processEventRange(startTime: Date, endTime: Date) {
-  const dataSource = new FlowcoreDataSource(config)
-  const startBucket = format(startOfHour(startTime), "yyyyMMddHH0000")
-  const endBucket = format(startOfHour(endTime), "yyyyMMddHH0000")
-
-  const dataPump = FlowcoreDataPump.create({
-    // ... config
-    stateManager: {
-      getState: () => ({ timeBucket: startBucket }),
-      setState: (state) => console.log(`Progress: ${state.timeBucket}`),
-    },
-    stopAt: endTime, // Automatically stop at end time
-  })
-
-  await dataPump.start()
-}
-
-// Process events from specific date range
-await processEventRange(
-  new Date("2024-01-01"),
-  new Date("2024-01-02"),
-)
 ```
 
 ## 📊 Monitoring & Metrics
@@ -747,56 +776,3 @@ app.get("/metrics", (req, res) => {
 - `flowcore_data_pump_sdk_commands_counter` - API calls to Flowcore
 
 All metrics include labels: `tenant`, `data_core`, `flow_type`, `event_type`
-
-## 🛠️ Advanced Usage
-
-### Historical Processing
-
-Process events from a specific time range:
-
-```typescript
-const dataPump = FlowcoreDataPump.create({
-  // ... other config
-  stopAt: new Date("2024-01-01T12:00:00Z"), // Stop at specific time
-  stateManager: {
-    getState: () => ({
-      timeBucket: "20240101000000", // Start from specific time
-      eventId: undefined,
-    }),
-    setState: (state) => console.log("Progress:", state),
-  },
-})
-```
-
-### Custom Logging
-
-```typescript
-const customLogger = {
-  debug: (msg, meta) => console.debug(`[DEBUG] ${msg}`, meta),
-  info: (msg, meta) => console.info(`[INFO] ${msg}`, meta),
-  warn: (msg, meta) => console.warn(`[WARN] ${msg}`, meta),
-  error: (msg, meta) => console.error(`[ERROR] ${msg}`, meta),
-}
-
-const dataPump = FlowcoreDataPump.create({
-  // ... other config
-  logger: customLogger,
-})
-```
-
-### Graceful Shutdown
-
-```typescript
-let dataPump
-
-// Start the pump
-dataPump = FlowcoreDataPump.create({/* config */})
-await dataPump.start()
-
-// Graceful shutdown
-process.on("SIGINT", async () => {
-  console.log("Shutting down gracefully...")
-  dataPump.stop()
-  process.exit(0)
-})
-```
