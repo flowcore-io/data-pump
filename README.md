@@ -24,7 +24,7 @@ const dataPump = FlowcoreDataPump.create({
     eventTypes: ["event-type-name-1", "event-type-name-2", "event-type-name-3"],
   },
   stateManager: {
-    getState: () => null, // Start from latest
+    getState: () => null, // Start in live mode
     setState: (state) => console.log("Position:", state),
   },
   processor: {
@@ -35,8 +35,8 @@ const dataPump = FlowcoreDataPump.create({
   },
   notifier: { type: "websocket" },
 
-  directMode: false, // set to true if you have a dedicated cluster
-  noTranslation: false, // set to true if you have a dedicated cluster
+  directMode: false, // To interact with the Flowcore API more directly. This is a dedicated cluster feature.
+  noTranslation: false, // Don't convert names to ids. This is a dedicated cluster feature.
   bufferSize: 100,
   logger: {
     debug: (msg) => console.log(`[DEBUG] ${msg}`),
@@ -105,7 +105,7 @@ const dataPump = FlowcoreDataPump.create({
   dataSource: {/* data source config */},
   stateManager: {/* state management */},
   processor: {
-    concurrency: 5, // Process up to 5 events in parallel
+    concurrency: 5,
     handler: async (events) => {
       for (const event of events) {
         await processEvent(event)
