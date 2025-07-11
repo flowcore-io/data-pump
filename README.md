@@ -76,10 +76,10 @@ Events are organized in **hourly time buckets** using the format `yyyyMMddHH0000
 
 **Why time buckets matter:**
 
-- 📍 **Precise positioning**: Resume from any hour in your event history
-- ⚡ **Efficient queries**: Flowcore can quickly locate events within time ranges
-- 🔄 **Catch-up processing**: Process months of historical data in sequence
-- 🎯 **Debugging**: Jump to specific time periods when issues occurred
+- **Precise positioning**: Resume from any hour in your event history
+- **Efficient queries**: Flowcore can quickly locate events within time ranges
+- **Catch-up processing**: Process months of historical data in sequence
+- **Debugging**: Jump to specific time periods when issues occurred
 
 ### **State Management**
 
@@ -342,7 +342,9 @@ or deployments. It prevents duplicate processing and ensures no events are lost.
 ```typescript
 interface FlowcoreDataPumpState {
   timeBucket: string // Format: "yyyyMMddHH0000" (e.g., "20240101120000")
-  eventId?: string // Optional: specific event ID to resume from
+  eventId?: string | undefined // Optional: specific event ID to resume from
+  // eventId doesn't have to be the id of an actual event. Event Ids are timestamps that have been converted to UUIDs.
+  // You can use the TimeUuid class to convert between timestamps and event IDs.
 }
 ```
 
@@ -358,26 +360,27 @@ FlowcoreDataPump includes utilities for converting between timestamps and event 
 ```typescript
 import { TimeUuid } from "@flowcore/time-uuid"
 
-// Generate event ID from specific timestamp  
+// Generate event ID from specific timestamp
 const eventId = TimeUuid.fromDate(new Date("2024-01-01T12:30:00Z")).toString()
 
 // Start processing from timestamp (doesn't need to match existing event)
-stateManager: {
-  getState: () => ({
-    timeBucket: "20240101120000", // Hour bucket: 2024-01-01 12:00
-    eventId: eventId              // Start from first event AFTER 12:30:00
-  }),
-  setState: (state) => {
-    // Extract timestamp from event ID
-    const timestamp = TimeUuid.fromString(state.eventId).getDate()
-    console.log(`Processed up to: ${timestamp.toISOString()}`)
-  }
+const stateManager = {
+  stateManager: {
+    getState: () => ({
+      timeBucket: "20240101120000", // Hour bucket: 2024-01-01 12:00
+      eventId: eventId, // Start from first event AFTER 12:30:00
+    }),
+    setState: (state) => {
+      // Extract timestamp from event ID
+      const timestamp = TimeUuid.fromString(state.eventId).getDate()
+      console.log(`Processed up to: ${timestamp.toISOString()}`)
+    },
+  },
 }
-
 // Other useful TimeUuid methods:
-const now = TimeUuid.now().toString()                    // Current timestamp as UUID
-const date = TimeUuid.fromString(eventId).getDate()      // Extract Date from UUID
-const timestamp = date.getTime()                         // Unix timestamp
+const now = TimeUuid.now().toString() // Current timestamp as UUID
+const date = TimeUuid.fromString(eventId).getDate() // Extract Date from UUID
+const timestamp = date.getTime() // Unix timestamp
 ```
 
 **Use cases:**
@@ -751,7 +754,7 @@ dataPump.onFinalyFailed(async (failedEvents) => {
 })
 ```
 
-## 📊 Monitoring & Metrics
+## Monitoring & Metrics
 
 The data pump exposes Prometheus-compatible metrics:
 
