@@ -500,7 +500,7 @@ Real-time notifications via Flowcore's notification service:
 ```typescript
 notifier: {
   type: "websocket"
-} // Default - can be omitted
+}
 ```
 
 ### NATS
@@ -527,22 +527,22 @@ notifier: {
 
 ## ⚙️ Configuration Reference
 
-| Option                  | Type                              | Default      | Description                                                                                                                                                                                                     |
-| ----------------------- | --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth`                  | `FlowcoreDataPumpAuth`            | **Required** | Authentication configuration (API key or Bearer token)                                                                                                                                                          |
-| `dataSource`            | `FlowcoreDataPumpDataSource`      | **Required** | Data source configuration (tenant, dataCore, flowType, eventTypes)                                                                                                                                              |
-| `stateManager`          | `FlowcoreDataPumpStateManager`    | **Required** | State persistence configuration                                                                                                                                                                                 |
-| `bufferSize`            | `number`                          | `1000`       | Maximum events to buffer in memory                                                                                                                                                                              |
-| `maxRedeliveryCount`    | `number`                          | `3`          | Max retry attempts before marking event as failed                                                                                                                                                               |
-| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Timeout for event acknowledgment                                                                                                                                                                                |
-| `includeSensitiveData`  | `boolean`                         | `false`      | Include sensitive data in events                                                                                                                                                                                |
-| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration                                                                                                                                                                              |
-| `notifier`              | `FlowcoreDataPumpNotifierOptions` | `websocket`  | Notification method configuration                                                                                                                                                                               |
-| `logger`                | `FlowcoreLogger`                  | `undefined`  | Custom logger implementation                                                                                                                                                                                    |
-| `stopAt`                | `Date`                            | `undefined`  | Stop processing at specific date (for historical processing)                                                                                                                                                    |
-| `baseUrlOverride`       | `string`                          | `undefined`  | Override Flowcore API base URL                                                                                                                                                                                  |
-| `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation. This is mostly used in dedicated clusters. And for performance reasons.                                                                                                            |
-| `directMode`            | `boolean`                         | `false`      | Enables direct API execution mode, bypassing intermediary gateways and automatic name-to-ID translations; recommended for dedicated Flowcore clusters to reduce latency (often used with `noTranslation: true`) |
+| Option                  | Type                              | Default      | Description                                                                                                                                                               |
+| ----------------------- | --------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`                  | `FlowcoreDataPumpAuth`            | **Required** | Authentication configuration (API key or Bearer token)                                                                                                                    |
+| `dataSource`            | `FlowcoreDataPumpDataSource`      | **Required** | Data source configuration (tenant, dataCore, flowType, eventTypes)                                                                                                        |
+| `stateManager`          | `FlowcoreDataPumpStateManager`    | **Required** | State persistence configuration                                                                                                                                           |
+| `bufferSize`            | `number`                          | `1000`       | Maximum events to buffer in memory                                                                                                                                        |
+| `maxRedeliveryCount`    | `number`                          | `3`          | Max retry attempts before marking event as failed                                                                                                                         |
+| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Timeout for event acknowledgment                                                                                                                                          |
+| `includeSensitiveData`  | `boolean`                         | `false`      | Include sensitive data in events                                                                                                                                          |
+| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration                                                                                                                                        |
+| `notifier`              | `FlowcoreDataPumpNotifierOptions` | `websocket`  | Notification method configuration                                                                                                                                         |
+| `logger`                | `FlowcoreLogger`                  | `undefined`  | Custom logger implementation                                                                                                                                              |
+| `stopAt`                | `Date`                            | `undefined`  | Stop processing at specific date (for historical processing)                                                                                                              |
+| `baseUrlOverride`       | `string`                          | `undefined`  | Override Flowcore API base URL                                                                                                                                            |
+| `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation. This is mostly for performance reasons.                                                                                                      |
+| `directMode`            | `boolean`                         | `false`      | Enables direct API execution mode, bypassing intermediary gateways; recommended for dedicated Flowcore clusters to reduce latency (often used with `noTranslation: true`) |
 
 ## 📊 Monitoring & Metrics
 
