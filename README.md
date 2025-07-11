@@ -257,14 +257,14 @@ FlowcoreDataPump includes utilities for converting between timestamps and event 
 ```typescript
 import { TimeUuid } from "@flowcore/time-uuid"
 
-// Generate event ID from specific timestamp
+// Generate event ID from specific timestamp  
 const eventId = TimeUuid.fromDate(new Date("2024-01-01T12:30:00Z")).toString()
 
-// Start processing from exact timestamp
+// Start processing from timestamp (doesn't need to match existing event)
 stateManager: {
   getState: () => ({
     timeBucket: "20240101120000", // Hour bucket: 2024-01-01 12:00
-    eventId: eventId              // Precise position: 12:30:00
+    eventId: eventId              // Start from first event AFTER 12:30:00
   }),
   setState: (state) => {
     // Extract timestamp from event ID
@@ -281,10 +281,11 @@ const timestamp = date.getTime()                         // Unix timestamp
 
 **Use cases:**
 
-- **Precise replay**: Start from exact timestamp within an hour
+- **Precise replay**: Start from any timestamp within an hour (finds next available event)
 - **Debugging**: Convert event IDs back to readable timestamps
 - **Monitoring**: Track processing progress with human-readable times
 - **Coordination**: Synchronize multiple instances to specific points
+- **Gap handling**: Works even when no events exist at exact timestamp
 
 ### Memory State Manager (Development)
 
