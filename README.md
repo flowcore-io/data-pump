@@ -544,6 +544,178 @@ notifier: {
 | `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation. This is mostly for performance reasons.                                                                                                      |
 | `directMode`            | `boolean`                         | `false`      | Enables direct API execution mode, bypassing intermediary gateways; recommended for dedicated Flowcore clusters to reduce latency (often used with `noTranslation: true`) |
 
+## 🔧 API Reference
+
+### FlowcoreDataSource Methods
+
+The `FlowcoreDataSource` class provides several useful methods for historical processing and data exploration. This can
+be used to replay events from the beginning or a specific time in the State Manager.
+
+#### Time Bucket Management
+
+```typescript
+// Get all available time buckets for your event types
+const timeBuckets = await dataSource.getTimeBuckets()
+console.log(`Found ${timeBuckets.length} time buckets`)
+console.log(`First: ${timeBuckets[0]}, Last: ${timeBuckets[timeBuckets.length - 1]}`)
+
+// Get the next time bucket after a specific one
+const nextBucket = await dataSource.getNextTimeBucket("20240101120000")
+
+// Get the closest time bucket to a specific time (forward or backward)
+const closestBucket = await dataSource.getClosestTimeBucket("20240101150000") // Forward
+const previousBucket = await dataSource.getClosestTimeBucket("20240101150000", true) // Backward
+```
+
+#### Direct Event Access
+
+```typescript
+// Get events directly from a specific state
+const events = await dataSource.getEvents(
+  { timeBucket: "20240101120000", eventId: "some-event-id" },
+  100, // amount
+  undefined, // toEventId (optional)
+  undefined, // cursor (optional)
+  false, // includeSensitiveData
+)
+
+console.log(`Retrieved ${events.events.length} events`)
+```
+
+#### Resource Information
+
+```typescript
+// Access configured names
+console.log(dataSource.tenant) // "your-tenant-name"
+console.log(dataSource.dataCore) // "your-data-core"
+console.log(dataSource.flowType) // "your-flow-type"
+console.log(dataSource.eventTypes) // ["event-type-1", "event-type-2"]
+
+// Get translated IDs (useful for debugging or direct API calls)
+const tenantId = await dataSource.getTenantId()
+const dataCoreId = await dataSource.getDataCoreId()
+const flowTypeId = await dataSource.getFlowTypeId()
+const eventTypeIds = await dataSource.getEventTypeIds()
+```
+
+### FlowcoreDataPump Methods
+
+The `FlowcoreDataPump` provides control methods for both push and pull modes:
+
+#### Pump Control
+
+```typescript
+// Check if pump is running
+if (dataPump.isRunning) {
+  console.log("Pump is running")
+}
+
+// Start the pump
+await dataPump.start()
+
+// Stop the pump
+dataPump.stop()
+
+// Restart from a specific position (useful for backfill scenarios)
+dataPump.restart({
+  timeBucket: "20240101120000",
+  eventId: "specific-event-id",
+})
+
+// Restart with a new stop date
+dataPump.restart(
+  { timeBucket: "20240101120000" },
+  new Date("2024-01-02"), // stopAt
+)
+```
+
+#### Pull Mode Methods (Manual Processing)
+
+```typescript
+// Reserve events for processing (pull mode only)
+const events = await dataPump.reserve(10) // Reserve 10 events
+
+// Acknowledge successfully processed events
+await dataPump.acknowledge(events.map((e) => e.eventId))
+
+// Mark events as failed (will trigger retries)
+await dataPump.fail(["event-id-1", "event-id-2"])
+
+// Handle events that permanently failed (exceeded retry limit)
+dataPump.onFinalyFailed(async (failedEvents) => {
+  console.log(`${failedEvents.length} events permanently failed`)
+  // Log to external system, send alerts, etc.
+})
+```
+
+### Historical Processing Patterns
+
+#### Pattern 1: Data Discovery
+
+```typescript
+const dataSource = new FlowcoreDataSource(config)
+
+// Discover available data
+const timeBuckets = await dataSource.getTimeBuckets()
+console.log(`📊 Data range: ${timeBuckets[0]} to ${timeBuckets[timeBuckets.length - 1]}`)
+
+// Peek at some events
+const sample = await dataSource.getEvents(
+  { timeBucket: timeBuckets[0] },
+  5, // Just get 5 events to see structure
+)
+console.log("📝 Sample events:", sample.events.slice(0, 2))
+```
+
+#### Pattern 2: Controlled Historical Replay
+
+```typescript
+const dataPump = FlowcoreDataPump.create({
+  // ... auth, dataSource config
+  stateManager: {
+    getState: async () => {
+      const timeBuckets = await dataSource.getTimeBuckets()
+      if (timeBuckets.length === 0) return null
+
+      // Start from specific time bucket
+      return { timeBucket: timeBuckets[0] }
+    },
+    setState: (state) => console.log(`📍 Position: ${state.timeBucket}`),
+  },
+})
+
+// Stop after processing specific amount or time
+const stopDate = new Date("2024-01-01T12:00:00Z")
+dataPump.restart({ timeBucket: "20240101000000" }, stopDate)
+```
+
+#### Pattern 3: Event Range Processing
+
+```typescript
+async function processEventRange(startTime: Date, endTime: Date) {
+  const dataSource = new FlowcoreDataSource(config)
+  const startBucket = format(startOfHour(startTime), "yyyyMMddHH0000")
+  const endBucket = format(startOfHour(endTime), "yyyyMMddHH0000")
+
+  const dataPump = FlowcoreDataPump.create({
+    // ... config
+    stateManager: {
+      getState: () => ({ timeBucket: startBucket }),
+      setState: (state) => console.log(`Progress: ${state.timeBucket}`),
+    },
+    stopAt: endTime, // Automatically stop at end time
+  })
+
+  await dataPump.start()
+}
+
+// Process events from specific date range
+await processEventRange(
+  new Date("2024-01-01"),
+  new Date("2024-01-02"),
+)
+```
+
 ## 📊 Monitoring & Metrics
 
 The data pump exposes Prometheus-compatible metrics:
