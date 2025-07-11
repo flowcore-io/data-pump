@@ -616,17 +616,23 @@ await dataPump.start()
 // Stop the pump
 dataPump.stop()
 
-// Restart from a specific position (useful for backfill scenarios)
+// Restart from a specific position - stops current processing and resumes from new location
+// This is useful for backfill scenarios, error recovery, and dynamic repositioning
 dataPump.restart({
-  timeBucket: "20240101120000",
-  eventId: "specific-event-id",
+  timeBucket: "20240101120000", // Required: target time bucket
+  eventId: "specific-event-id", // Optional: specific event (omit to start from first event in bucket)
 })
 
-// Restart with a new stop date
+// Restart with a new stop date - change both position AND stop condition
 dataPump.restart(
   { timeBucket: "20240101120000" },
-  new Date("2024-01-02"), // stopAt
+  new Date("2024-01-02"), // New stopAt date (or null to remove limit)
 )
+
+// Common restart patterns:
+// 1. Jump to historical data: dataPump.restart({ timeBucket: firstTimeBucket })
+// 2. Reprocess from error point: dataPump.restart(lastKnownGoodState)
+// 3. Start backfill operation: dataPump.restart({ timeBucket: "20240101000000" }, endDate)
 ```
 
 #### Pull Mode Methods (Manual Processing)
