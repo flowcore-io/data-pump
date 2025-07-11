@@ -6,23 +6,25 @@ real-time event processing with automatic retry, buffering, and state management
 [![JSR](https://jsr.io/badges/@flowcore/data-pump)](https://jsr.io/@flowcore/data-pump)
 [![NPM Version](https://img.shields.io/npm/v/@flowcore/data-pump)](https://www.npmjs.com/package/@flowcore/data-pump)
 
-## Example Setup
+## Simple Example Setup
 
 ```typescript
 import { FlowcoreDataPump } from "@flowcore/data-pump"
 
 const dataPump = FlowcoreDataPump.create({
-  // make sure that api key has sufficient permissions to access streaming operations (COLLABORATOR is an example of a role that has sufficient permissions)
+  // make sure that api key has sufficient IAM permissions to access streaming operations (COLLABORATOR is an example of a role that has sufficient permissions)
+  // there are two ways to authenticate. API key and OIDC/Bearer token.
   auth: {
     apiKey: "your-api-key",
     apiKeyId: "your-api-key-id",
   },
   dataSource: {
-    tenant: "your-tenant-name",
-    dataCore: "your-data-core-name",
-    flowType: "your-flow-type-name",
-    eventTypes: ["event-type-name-1", "event-type-name-2", "event-type-name-3"],
+    tenant: "your-tenant-name", // this should always be the tenant name, not the tenant id
+    dataCore: "your-data-core", // if noTranslation is false, this should be the data core name, not the id
+    flowType: "your-flow-type", // if noTranslation is false, this should be the flow type name, not the id
+    eventTypes: ["event-type-1", "event-type-2", "event-type-3"], // if noTranslation is false, this should be the event type names, not the ids
   },
+  noTranslation: false, // if true (the data core, flow types, and event types) names will not be translated to ids. Use this for performance reasons.
   stateManager: {
     getState: () => null, // Start in live mode
     setState: (state) => console.log("Position:", state),
@@ -36,7 +38,6 @@ const dataPump = FlowcoreDataPump.create({
   notifier: { type: "websocket" },
 
   directMode: false, // To interact with the Flowcore API more directly. This is a dedicated cluster feature.
-  noTranslation: false, // Don't convert names to ids. This is a dedicated cluster feature.
   bufferSize: 100,
   logger: {
     debug: (msg) => console.log(`[DEBUG] ${msg}`),
@@ -50,12 +51,6 @@ await dataPump.start()
 ```
 
 ## 📦 Installation
-
-### Deno
-
-```typescript
-import { FlowcoreDataPump } from "jsr:@flowcore/data-pump"
-```
 
 ### Node.js
 
@@ -93,11 +88,15 @@ Events are buffered locally with configurable sizes to handle:
 - **Batch processing**: Process multiple events together efficiently
 - **Flow control**: Automatic throttling based on buffer capacity
 
-## 🎯 Usage Patterns
+## Usage Patterns
 
-### Push Mode (Automatic Processing)
+### Push Mode (Automatic Lifecycle Management)
 
-The data pump automatically reserves, processes, and acknowledges events:
+**Best for most use cases** - You focus on business logic, the pump handles everything else automatically.
+
+- **You handle**: Writing your event processing logic
+- **Pump handles**: Reserve → Process → Acknowledge → Retry on failures
+- **Use when**: Standard event processing with simple error handling
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
@@ -107,12 +106,15 @@ const dataPump = FlowcoreDataPump.create({
   processor: {
     concurrency: 5,
     handler: async (events) => {
+      // 🎯 You only write business logic here
       for (const event of events) {
         await processEvent(event)
       }
+      // ✅ Pump automatically acknowledges if successful
+      // ❌ Pump automatically retries if errors thrown
     },
     failedHandler: async (failedEvents) => {
-      // Handle permanently failed events
+      // Handle events that permanently failed after all retries
       await logFailedEvents(failedEvents)
     },
   },
@@ -120,27 +122,31 @@ const dataPump = FlowcoreDataPump.create({
   maxRedeliveryCount: 3,
 })
 
-await dataPump.start()
+await dataPump.start() // Just start and it runs automatically!
 ```
 
-### Pull Mode (Manual Processing)
+### Pull Mode (Manual Lifecycle Control)
 
-For full control over event processing lifecycle:
+**For advanced scenarios** - You control the entire event lifecycle manually.
+
+- **You handle**: Reserve → Process → Acknowledge/Fail → Custom retry logic
+- **Pump provides**: Raw event access and buffer management
+- **Use when**: Complex error handling, partial batch failures, or custom acknowledgment logic
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
   auth: {/* auth config */},
   dataSource: {/* data source config */},
   stateManager: {/* state management */},
-  // No processor - manual mode
+  // ❌ No processor = manual mode
 })
 
 await dataPump.start()
 
-// Manual processing loop
+// You manually control the entire event lifecycle
 while (dataPump.isRunning) {
   try {
-    // Reserve events for processing
+    // 1️⃣ YOU manually reserve events from buffer
     const events = await dataPump.reserve(10)
 
     if (events.length === 0) {
@@ -148,12 +154,12 @@ while (dataPump.isRunning) {
       continue
     }
 
-    // Process events
+    // 2️⃣ YOU handle business logic with custom error handling
     const results = await Promise.allSettled(
       events.map((event) => processEvent(event)),
     )
 
-    // Separate successful and failed events
+    // 3️⃣ YOU decide what succeeded vs failed
     const successfulIds = []
     const failedIds = []
 
@@ -166,12 +172,12 @@ while (dataPump.isRunning) {
       }
     })
 
-    // Acknowledge successful events
+    // 4️⃣ YOU manually acknowledge successful events (removes from buffer)
     if (successfulIds.length > 0) {
       await dataPump.acknowledge(successfulIds)
     }
 
-    // Mark failed events
+    // 5️⃣ YOU manually mark failed events for retry
     if (failedIds.length > 0) {
       await dataPump.fail(failedIds)
     }
@@ -181,7 +187,19 @@ while (dataPump.isRunning) {
 }
 ```
 
-## 🔐 Authentication
+### Which Mode Should You Use?
+
+| Scenario                        | Recommended Mode | Why                                                        |
+| ------------------------------- | ---------------- | ---------------------------------------------------------- |
+| **Simple event processing**     | **Push Mode**    | Just write business logic, pump handles everything else    |
+| **Standard error handling**     | **Push Mode**    | Automatic retries and failure handling work for most cases |
+| **Getting started**             | **Push Mode**    | Much simpler to set up and understand                      |
+| **Complex error handling**      | **Pull Mode**    | Need to handle some events succeeding while others fail    |
+| **Conditional acknowledgments** | **Pull Mode**    | Business logic determines which events to acknowledge      |
+| **Custom retry strategies**     | **Pull Mode**    | Need more control than simple retry count                  |
+| **Transaction integration**     | **Pull Mode**    | Need to coordinate with database transactions              |
+
+## Authentication
 
 ### API Key Authentication
 
@@ -192,8 +210,8 @@ auth: {
 }
 ```
 
-> **💡 Important:** Make sure your API key has sufficient permissions. The key should have **COLLABORATOR** role or
-> equivalent permissions to access streaming operations.
+> **💡 Important:** Make sure your API key has sufficient IAM permissions. The key should have **COLLABORATOR** role or
+> other IAM permissions that have access to streaming operations.
 
 ### OIDC/Bearer Token Authentication
 
@@ -211,20 +229,58 @@ auth: {
 }
 ```
 
-## 💾 State Management
+## State Management
 
-### Memory State Manager (Development)
+The state manager tracks your processing position so you can resume exactly where you left off after restarts, crashes,
+or deployments. It prevents duplicate processing and ensures no events are lost.
+
+### Understanding State
+
+**State Format:**
 
 ```typescript
-let currentState = null;
-
-stateManager: {
-  getState: () => currentState,
-  setState: (state) => { currentState = state; }
+interface FlowcoreDataPumpState {
+  timeBucket: string // Format: "yyyyMMddHH0000" (e.g., "20240101120000")
+  eventId?: string // Optional: specific event ID to resume from
 }
 ```
 
-### File-based State Manager
+**Return Values:**
+
+- `null` → Start in **live mode** (process new events only)
+- `{ timeBucket, eventId }` → Start from **specific position** (historical processing)
+
+### Memory State Manager (Development)
+
+**Best for**: Local development, testing, non-critical applications
+
+```typescript
+let currentState = null; // Start in live mode
+
+// Or start from specific time:
+// let currentState = { 
+//   timeBucket: "20240101000000",  // January 1, 2024 00:00
+//   eventId: undefined             // Start from first event in that hour
+// };
+
+stateManager: {
+  getState: () => currentState,
+  setState: (state) => { 
+    currentState = state;
+    console.log(`Processed up to: ${state.timeBucket} - ${state.eventId}`);
+  }
+}
+```
+
+**⚠️ Limitations:**
+
+- State lost on process restart
+- No crash recovery
+- Cannot share state between instances
+
+### File-based State Manager (Single Instance)
+
+**Best for**: Single instance deployments, simple persistence needs
 
 ```typescript
 import { readFileSync, writeFileSync } from 'fs';
@@ -233,38 +289,172 @@ stateManager: {
   getState: () => {
     try {
       const data = readFileSync('pump-state.json', 'utf8');
-      return JSON.parse(data);
-    } catch {
-      return null; // Start from latest
+      const state = JSON.parse(data);
+      console.log('Resuming from saved state:', state);
+      return state;
+    } catch (error) {
+      console.log('No previous state found, starting fresh');
+      return null; // Start in live mode
     }
   },
   setState: (state) => {
-    writeFileSync('pump-state.json', JSON.stringify(state));
+    try {
+      writeFileSync('pump-state.json', JSON.stringify(state, null, 2));
+      console.log('State saved:', state);
+    } catch (error) {
+      console.error('Failed to save state:', error);
+      // Consider throwing to stop pump if state saving is critical
+    }
   }
 }
 ```
 
-### Database State Manager
+**✅ Benefits:**
+
+- Survives process restarts
+- Simple file-based persistence
+- No database dependency
+
+**⚠️ Limitations:**
+
+- Single instance only
+- File system dependency
+- No atomic updates
+
+### Database State Manager (Production)
+
+**Best for**: Production systems, multi-instance deployments, mission-critical applications
+
+```sql
+-- Example table schema
+CREATE TABLE flowcore_pump_state (
+  id VARCHAR(50) PRIMARY KEY,      -- Instance identifier
+  time_bucket VARCHAR(14) NOT NULL, -- "yyyyMMddHH0000"
+  event_id VARCHAR(255),           -- Last processed event ID
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
 
 ```typescript
 stateManager: {
   getState: async () => {
+    try {
+      const result = await db.query(
+        'SELECT time_bucket, event_id FROM flowcore_pump_state WHERE id = ?', 
+        ['main']
+      );
+      
+      if (result.length === 0) {
+        console.log('No previous state found, starting in live mode');
+        return null;
+      }
+      
+      const state = {
+        timeBucket: result[0].time_bucket,
+        eventId: result[0].event_id
+      };
+      console.log('Resuming from database state:', state);
+      return state;
+      
+    } catch (error) {
+      console.error('Failed to load state from database:', error);
+      // Critical decision: start fresh or fail fast?
+      return null; // Start fresh if DB is down
+      // throw error; // Or fail fast if state is critical
+    }
+  },
+  
+  setState: async (state) => {
+    try {
+      await db.query(`
+        INSERT INTO flowcore_pump_state (id, time_bucket, event_id, updated_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE 
+          time_bucket = VALUES(time_bucket),
+          event_id = VALUES(event_id),
+          updated_at = NOW()
+      `, ['main', state.timeBucket, state.eventId]);
+      
+    } catch (error) {
+      console.error('CRITICAL: Failed to save state to database:', error);
+      throw error; // Stop processing if we can't save progress
+    }
+  }
+}
+```
+
+**✅ Benefits:**
+
+- Survives crashes and restarts
+- Supports multiple instances
+- Atomic updates with transactions
+- Can be backed up with your database
+- Enables horizontal scaling
+
+**⚠️ Considerations:**
+
+- Database dependency
+- Network latency on state updates
+- Requires error handling strategy
+
+### State Management Patterns
+
+#### Multi-Instance Coordination
+
+```typescript
+// Each instance processes different event types
+const instanceId = `processor-${process.env.INSTANCE_ID}`;
+
+stateManager: {
+  getState: async () => {
     const result = await db.query(
-      'SELECT time_bucket, event_id FROM pump_state WHERE id = ?', 
-      ['main']
+      'SELECT time_bucket, event_id FROM flowcore_pump_state WHERE id = ?',
+      [instanceId] // Each instance has unique state
     );
     return result[0] || null;
   },
   setState: async (state) => {
     await db.query(
-      'INSERT OR REPLACE INTO pump_state (id, time_bucket, event_id) VALUES (?, ?, ?)',
-      ['main', state.timeBucket, state.eventId]
+      'INSERT OR REPLACE INTO flowcore_pump_state (id, time_bucket, event_id) VALUES (?, ?, ?)',
+      [instanceId, state.timeBucket, state.eventId]
     );
   }
 }
 ```
 
-## 🔔 Notification Methods
+#### Checkpoint Strategy
+
+```typescript
+// Save state every N events for performance
+let eventCount = 0;
+const CHECKPOINT_INTERVAL = 100;
+
+stateManager: {
+  getState: () => loadStateFromFile(),
+  setState: (state) => {
+    eventCount++;
+    // Only save every 100 events to reduce I/O
+    if (eventCount % CHECKPOINT_INTERVAL === 0) {
+      saveStateToFile(state);
+      console.log(`Checkpoint saved after ${eventCount} events`);
+    }
+  }
+}
+```
+
+### Choosing a State Manager
+
+| Scenario                        | Recommended              | Reason                             |
+| ------------------------------- | ------------------------ | ---------------------------------- |
+| **Local development**           | Memory                   | Fast iteration, no setup           |
+| **Testing/CI**                  | Memory                   | Clean state per test run           |
+| **Single instance, simple**     | File-based               | Persistence without DB complexity  |
+| **Production, single instance** | Database                 | Reliability and backup integration |
+| **Multi-instance**              | Database                 | Shared state coordination          |
+| **High-throughput**             | Database + Checkpointing | Performance optimization           |
+| **Mission-critical**            | Database + Monitoring    | Full observability stack           |
+
+## Notification Methods
 
 ### WebSocket (Default)
 
