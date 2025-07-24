@@ -99,6 +99,14 @@ export class FlowcoreDataPump {
   }
 
   public static create(options: FlowcoreDataPumpOptions, dataSourceOverride?: FlowcoreDataSource): FlowcoreDataPump {
+    if ("apiKey" in options.auth && !options.auth.apiKeyId) {
+      const parts = options.auth.apiKey.split("_")
+      if (parts.length !== 3 || parts[0] !== "fc") {
+        throw new Error("Invalid API key")
+      }
+      options.auth.apiKeyId = parts[1]
+    }
+
     const dataSource = dataSourceOverride ?? new FlowcoreDataSource({
       auth: options.auth,
       dataSource: options.dataSource,
