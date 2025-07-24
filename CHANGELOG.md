@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.16.0](https://github.com/flowcore-io/data-pump/compare/v0.15.1...v0.16.0) (2025-07-24)
+
+
+### Features
+
+* support new api key format ([52017e0](https://github.com/flowcore-io/data-pump/commit/52017e0ed720af9b0aa6765db29ac024dfc56c23))
+* support new api key format ([ca9955f](https://github.com/flowcore-io/data-pump/commit/ca9955f17948d10daad29f39980537336fd9c908))
+
+
+### Bug Fixes
+
+* add comments ([316f7e8](https://github.com/flowcore-io/data-pump/commit/316f7e83e299f39f6069d119db3183eedf5d2f04))
+* fix type ([1f98ecf](https://github.com/flowcore-io/data-pump/commit/1f98ecf1bbb82ab32bf151d6a863d8ed3e93c7c8))
+* fix type ([1c6242d](https://github.com/flowcore-io/data-pump/commit/1c6242df1730e56a27c2537686684e373e591213))
+
 ## [0.15.1](https://github.com/flowcore-io/data-pump/compare/v0.15.0...v0.15.1) (2025-06-27)
 
 
