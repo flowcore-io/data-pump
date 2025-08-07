@@ -6,12 +6,12 @@ import { FlowcoreDataSource } from "./data-source.ts"
 import { metrics } from "./metrics.ts"
 import { FlowcoreNotifier } from "./notifier.ts"
 import type {
-  FlowcoreDataPumpAuth,
-  FlowcoreDataPumpDataSource,
-  FlowcoreDataPumpProcessor,
-  FlowcoreDataPumpState,
-  FlowcoreDataPumpStateManager,
-  FlowcoreLogger,
+    FlowcoreDataPumpAuth,
+    FlowcoreDataPumpDataSource,
+    FlowcoreDataPumpProcessor,
+    FlowcoreDataPumpState,
+    FlowcoreDataPumpStateManager,
+    FlowcoreLogger,
 } from "./types.ts"
 
 interface FlowcoreDataPumpNotifierNatsOptions {
@@ -82,7 +82,7 @@ export class FlowcoreDataPump {
   private finallyFailedHandler?: (events: FlowcoreEvent[]) => Promise<void> | void
 
   private constructor(
-    private readonly dataSource: FlowcoreDataSource,
+    public readonly dataSource: FlowcoreDataSource,
     private readonly notifier: FlowcoreNotifier,
     private stateManager: FlowcoreDataPumpStateManager,
     private readonly options: FlowcoreDataPumpInnerOptions,

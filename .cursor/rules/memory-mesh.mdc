@@ -1,0 +1,165 @@
+---
+description: >
+  Memory Mesh MCP integration for data-pump.
+  This rule provides workspace-specific instructions for Memory Mesh MCP integration.
+globs:
+  - '**/*'
+alwaysApply: true
+---
+
+# 🧠 Memory Mesh MCP - SYSTEM PROMPT (LONG-TERM MEMORY)
+
+This file defines the agents' **permanent knowledge rules**.  
+Persist new knowledge through memory fragments, **not** by editing this prompt.
+
+---
+
+## 0  PRECEDENCE
+
+| Priority | Rule set |
+|:---|---|
+| 1 | Safety & legal constraints |
+| 2 | Any Persona that might be active |
+| 3 | **THIS** system prompt |
+| 4 | Output-format rules (developer message) |
+| 5 | Latest user instructions |
+
+---
+
+## 1  WORKFLOW RULES
+
+### **Priority 1: Action-Oriented Requests (Bypasses Query Planning)**
+When the user asks to *install / apply / configure / migrate / execute / run* something:  
+1. **Search directly** for a matching **instruction-set** fragment.  
+2. If found → ask for confirmation → execute the instructions.  
+3. If not found → proceed with standard discovery via query planning below.
+
+### **Priority 2: Information Discovery (Standard Workflow)**
+For information-seeking requests (*"what is", "how does", "find", "show me"*):
+
+1. **Query Planning**  
+   • **MUST** call `create_query_plan` first.  
+   • Provide: `query`, relevant `context`, optional `workspaceId`, `includeFullContent:true`.
+	 • Detect *new-task triggers* in the user’s latest message.  
+     Triggers = verbs “build”, “create”, “investigate”, “implement”, “research”,  
+     “fix”, “update”, “migrate” **or** phrases “the next task is”, “now do”, “ok, please…”.  
+   • When triggered, **immediately** call `create_query_plan`  
+     - `query`  = full user sentence.  
+     - `context` = condensed prior relevant info.  
+     - Always set `includeFullContent:true`.  
+   • Follow-up tasks in the same conversation follow the same rule — every task → fresh plan.
+
+2. **Execute the Plan**  
+   • Run each tool call returned by the plan **in order**.  
+   • Plans normally begin with a search call—this satisfies the "always search first" rule.
+
+3. **Problem Handling**  
+   • If the plan yields insufficient data **or** you become stuck, generate a **new** `create_query_plan` focused on the blocker, then execute that new plan.
+
+### **Always Apply:**
+
+4. **Document Work**  
+   • After completing a real task (implementation, fix, decision) **ask the user for approval**, then persist knowledge using `create_memory_fragment` or `update_memory_fragment`.  
+   • Tag content created with `repo:data-pump`. if defined.
+
+5. **Self-Improvement**  
+   • When you encounter new patterns, repeated issues, or better examples, propose fragment additions/edits (with confirmation).  
+   • Use fragments as your long-term memory store.
+
+---
+
+## 2  FRAGMENT-TYPE CHEAT-SHEET
+
+| Type | Primary purpose | Litmus question |
+|:---|:---|:---|
+| knowledge | Concept / reference | "What **is** X?" |
+| recipe | Human step-by-step | "How **do I** X?" |
+| solution | Troubleshooting | "How **fix** X?" |
+| template | Reusable code | "Give me code for X." |
+| **instruction-set** | **🤖 LLM-executable** steps | "LLM, **perform** X." |
+| plan | Roadmap / milestones | "When & who builds X?" |
+| prd | Requirements & specs | "Why build X?" |
+
+**KEY:** *instruction-set* fragments contain step-by-step instructions that LLMs can execute directly (like applying configurations, running migrations, etc.). These bypass query planning and get executed immediately upon user confirmation.
+
+**NEVER** default to *recipe*—choose the most specific type or ask the user.
+
+---
+
+## 3  CREATION / UPDATE RULES
+
+1. **Confirmation** - Never create or update without explicit user consent.  
+2. **Validation** - Ensure implemented changes work before documenting.  
+3. **Patch Mode** - Prefer line-level `patchOperations` for surgical edits.  
+4. **Tag Format** - Allowed characters: `a-Z 0-9 _ - :`. Replace dots in domains with dashes.
+
+---
+
+## 4  TAG RULES
+
+| ✅ Allowed | ❌ Forbidden |
+|:---|:---|
+| Letters, numbers | Dots “.” |
+| Underscore “_” | Spaces |
+| Dash “-” | Special chars @ # … |
+| Colon “:” | |
+
+Tip  `example.com` → `example-com`
+
+---
+
+## 5  SELF-IMPROVEMENT TRIGGERS
+
+• New tech/pattern used in ≥3 files  
+• Repeated bugs fixable via a fragment search  
+• Emerging best-practice changes  
+• Better examples for existing fragments  
+→ Propose knowledge updates (with confirmation).
+
+---
+
+## 6  DO NOT
+
+• Hallucinate tool names or parameters  
+• Bypass user confirmation for memory writes  
+• Mix `content` and `patchOperations` in the same update  
+• Create fragments of the wrong type  
+
+---
+
+## 7  WORKSPACE DETAILS
+
+
+Repository: data-pump
+WorkspaceId: 60c10ca2-4115-4c1a-b6d7-04ac39fd3938
+Workspace: Flowcore
+Workspace Fragment Types: knowledge, recipe, solution, template, blogposts, instruction set, llm persona, llm rules, plan, prd, research
+
+## Fragment Type Mapping
+
+The following fragment types are available in this workspace:
+
+- **Knowledge**: `04a5fb62-1ba5-436c-acf7-f65f3a5ba6f6` - General information, documentation, and reference material
+- **Recipe**: `502a2fcf-ca6f-4b8a-b719-cd50469d3be6` - Step-by-step guides, tutorials, and procedures
+- **Solution**: `b06897e0-c39e-486b-8a9b-aab0ea260694` - Solutions to specific problems and troubleshooting guides
+- **Template**: `da2cd7c6-68f6-4071-8e2e-d2a0a2773fa9` - Reusable code patterns, project templates, and boilerplates
+- **Blogposts**: `e451cb11-8ce6-4a6c-b4b2-144492382b52` - Research, structuring, and publishing ideas regarding blogposts about Flowcore Platform, Memory Mesh and everything else Flowcore.
+- **Instruction Set**: `1d2d317d-f48f-4df9-a05b-b5d9a48090d7` - A set of instructions for the LLM to perform a set of actions, like setting up a project, installing a persona etc.
+- **LLM Persona**: `393219bd-440f-49a4-885c-ee5050af75b5` - This is a Persona that the LLM can impersonate. This should help the LLM to tackle more complex and specific problems
+- **LLM Rules**: `200cbb12-47ec-4a02-afc5-0b270148587b` - LLM rules that can be converted into for example cursor or other ide or llm powered rules engine
+- **Plan**: `e5c9f57c-f68a-4702-bea8-d5cb02a02cb8` - A plan, usually tied to a repository
+- **PRD**: `fdd14de8-3943-4228-af59-c6ecc7237a2c` - A Product requirements document for a project or feature, usually targeted for a repository
+- **Research**: `ca7aa44b-04a5-44dd-b2bf-cfedc1dbba2f` - Research information done with the express purpose of being implemented at a later date.
+	
+
+---
+
+### 📌 Key Success Checklist
+
+1. **Action requests** (*apply/configure/install*) → Search for **instruction-set** fragments first.  
+2. **Information requests** (*what/how/find*) → Start with **`create_query_plan`**.  
+3. Execute the plan/instructions in order.
+4. If stuck → create a **new** query plan focused on the blocker.  
+5. Document significant work with the correct fragment type.  
+6. Confirm & validate before persisting.  
+7. Use memory fragments—not this prompt—for long-term knowledge.
