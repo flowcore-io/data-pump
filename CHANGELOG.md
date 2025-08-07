@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/flowcore-io/data-pump/compare/v0.16.0...v0.16.1) (2025-08-07)
+
+
+### Bug Fixes
+
+* **cursor:** :sparkles: add memory mesh MCP integration rules ([c3eafda](https://github.com/flowcore-io/data-pump/commit/c3eafda233b9b29b7b1b60cf5d522d34e579d483))
+
 ## [0.16.0](https://github.com/flowcore-io/data-pump/compare/v0.15.1...v0.16.0) (2025-07-24)
 
 
