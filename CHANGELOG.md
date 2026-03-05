@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.3](https://github.com/flowcore-io/data-pump/compare/v0.16.2...v0.16.3) (2026-03-05)
+
+
+### Bug Fixes
+
+* **ci:** updated npm publish ([2558a28](https://github.com/flowcore-io/data-pump/commit/2558a287950ff3179f1d52dc87f65b5b4714a02b))
+
 ## [0.16.2](https://github.com/flowcore-io/data-pump/compare/v0.16.1...v0.16.2) (2026-03-05)
 
 
