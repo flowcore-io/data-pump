@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.4](https://github.com/flowcore-io/data-pump/compare/v0.16.3...v0.16.4) (2026-03-05)
+
+
+### Bug Fixes
+
+* **ci:** update npm publish for OIDC trusted publishing ([854a2ea](https://github.com/flowcore-io/data-pump/commit/854a2eaa755d1a67d5cfe66fb156aa43507932eb))
+
 ## [0.16.3](https://github.com/flowcore-io/data-pump/compare/v0.16.2...v0.16.3) (2026-03-05)
 
 
