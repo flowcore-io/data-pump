@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.16.2](https://github.com/flowcore-io/data-pump/compare/v0.16.1...v0.16.2) (2026-03-05)
+
+
+### Bug Fixes
+
+* regenerate deno.lock with frozen-compatible entries ([474839d](https://github.com/flowcore-io/data-pump/commit/474839d127a3e7be0ad29c9c5137e96a07ec7a5a))
+* update @flowcore/sdk to ^1.68.0 for dedicated URL resolution ([5f1974a](https://github.com/flowcore-io/data-pump/commit/5f1974ae1aeeb8bf089e9e337a6e0ab9fa19edf0))
+* update SDK to ^1.68.0 for dedicated URL resolution ([0c8dc18](https://github.com/flowcore-io/data-pump/commit/0c8dc18390c9fa1311a4c504e35e7c181209fb73))
+* use bare specifiers for test imports to satisfy deno lint ([a8a11a0](https://github.com/flowcore-io/data-pump/commit/a8a11a08afb8d0d5ee0f0c7997511af374c5f453))
+
 ## [0.16.1](https://github.com/flowcore-io/data-pump/compare/v0.16.0...v0.16.1) (2025-08-07)
 
 
