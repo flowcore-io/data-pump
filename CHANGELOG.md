@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.5](https://github.com/flowcore-io/data-pump/compare/v0.16.4...v0.16.5) (2026-03-18)
+
+
+### Bug Fixes
+
+* **deps:** bump @flowcore/sdk to ^1.70.0 ([455f7cc](https://github.com/flowcore-io/data-pump/commit/455f7ccb46e7832e43008cbacc826a8831141673))
+
 ## [0.16.4](https://github.com/flowcore-io/data-pump/compare/v0.16.3...v0.16.4) (2026-03-05)
 
 
