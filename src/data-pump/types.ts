@@ -42,3 +42,13 @@ export interface FlowcoreDataPumpProcessor {
   handler: (events: FlowcoreEvent[]) => Promise<void>
   failedHandler?: (events: FlowcoreEvent[]) => void | Promise<void>
 }
+
+export interface FlowcoreDataPumpCoordinator {
+  acquireLease(instanceId: string, key: string, ttlMs: number): Promise<boolean>
+  renewLease(instanceId: string, key: string, ttlMs: number): Promise<boolean>
+  releaseLease(instanceId: string, key: string): Promise<void>
+  register(instanceId: string, address: string): Promise<void>
+  heartbeat(instanceId: string): Promise<void>
+  unregister(instanceId: string): Promise<void>
+  getInstances(staleThresholdMs: number): Promise<Array<{ instanceId: string; address: string }>>
+}

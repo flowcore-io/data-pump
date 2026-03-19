@@ -1,5 +1,7 @@
 export * from "./data-pump/data-pump.ts"
+export * from "./data-pump/data-pump-cluster.ts"
 export * from "./data-pump/data-source.ts"
 export * from "./data-pump/metrics.ts"
 export * from "./data-pump/types.ts"
+export * from "./data-pump/ws-protocol.ts"
 export * from "./data-pump/no-op-logger.ts"
