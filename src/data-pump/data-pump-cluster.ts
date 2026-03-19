@@ -17,7 +17,6 @@ const DELIVERY_TIMEOUT_MS = 30_000
 
 export interface FlowcoreDataPumpClusterOptions extends FlowcoreDataPumpOptions {
   coordinator: FlowcoreDataPumpCoordinator
-  port: number
   advertisedAddress: string
   leaseTtlMs?: number
   leaseRenewIntervalMs?: number
@@ -45,7 +44,6 @@ export class FlowcoreDataPumpCluster {
   private running = false
   private isLeader = false
   private pump?: FlowcoreDataPump
-  private wsServer?: Deno.HttpServer
   private leaderConnection?: WsConnection
 
   // leader state
@@ -92,6 +90,44 @@ export class FlowcoreDataPumpCluster {
     return this.instanceId
   }
 
+  /**
+   * Handle an incoming WebSocket connection from a peer.
+   * Call this from your HTTP server's WebSocket upgrade handler.
+   *
+   * Example (Deno):
+   * ```typescript
+   * Deno.serve({ port: 8080 }, (req) => {
+   *   if (req.headers.get("upgrade") === "websocket") {
+   *     const { socket, response } = Deno.upgradeWebSocket(req)
+   *     cluster.handleConnection(socket)
+   *     return response
+   *   }
+   *   return new Response("Not found", { status: 404 })
+   * })
+   * ```
+   *
+   * Example (Node.js with ws):
+   * ```typescript
+   * import { WebSocketServer } from "ws"
+   * const wss = new WebSocketServer({ port: 8080 })
+   * wss.on("connection", (ws) => cluster.handleConnection(ws))
+   * ```
+   */
+  handleConnection(ws: WebSocket): void {
+    this.logger?.debug("Incoming WS connection")
+
+    const conn = new WsConnection(ws, {
+      logger: this.logger,
+      onMessage: (msg) => this.handleWorkerMessage(msg, conn),
+      onClose: () => {
+        this.logger?.info("Leader connection closed")
+        this.leaderConnection = undefined
+      },
+    })
+
+    this.leaderConnection = conn
+  }
+
   async start(): Promise<void> {
     if (this.running) {
       throw new Error("Cluster already running")
@@ -100,16 +136,13 @@ export class FlowcoreDataPumpCluster {
 
     this.logger?.info("Starting cluster instance", { instanceId: this.instanceId })
 
-    // Step 1: Start WS server
-    this.startWsServer()
-
-    // Step 2: Register in DB
+    // Step 1: Register in DB
     await this.coordinator.register(this.instanceId, this.options.advertisedAddress)
 
-    // Step 3: Start heartbeat
+    // Step 2: Start heartbeat
     this.startHeartbeat()
 
-    // Step 4: Start leader election loop
+    // Step 3: Start leader election loop
     this.startElectionLoop()
   }
 
@@ -148,47 +181,11 @@ export class FlowcoreDataPumpCluster {
       // ignore
     }
 
-    // stop WS server
-    if (this.wsServer) {
-      await this.wsServer.shutdown()
-      this.wsServer = undefined
-    }
-
     clusterMetrics.leaderStatusGauge.set(0)
     clusterMetrics.activeWorkersGauge.set(0)
 
     this.logger?.info("Cluster instance stopped")
   }
-
-  // #region WebSocket Server
-
-  private startWsServer(): void {
-    this.wsServer = Deno.serve({ port: this.options.port, onListen: () => {} }, (req) => {
-      if (req.headers.get("upgrade") !== "websocket") {
-        return new Response("Expected WebSocket", { status: 426 })
-      }
-      const { socket, response } = Deno.upgradeWebSocket(req)
-
-      socket.onopen = () => {
-        this.logger?.debug("Incoming WS connection")
-      }
-
-      // incoming connections are from leader when we're a worker
-      const conn = new WsConnection(socket, {
-        logger: this.logger,
-        onMessage: (msg) => this.handleWorkerMessage(msg, conn),
-        onClose: () => {
-          this.logger?.info("Leader connection closed")
-          this.leaderConnection = undefined
-        },
-      })
-
-      this.leaderConnection = conn
-      return response
-    })
-  }
-
-  // #endregion
 
   // #region Heartbeat
 
@@ -475,19 +472,20 @@ export class FlowcoreDataPumpCluster {
       if (!this.running || !this.isLeader) return
 
       // re-discover address from DB if we don't have it
-      if (!address) {
+      let resolvedAddress = address
+      if (!resolvedAddress) {
         try {
           const instances = await this.coordinator.getInstances(DEFAULT_STALE_THRESHOLD_MS)
           const instance = instances.find((i) => i.instanceId === instanceId)
           if (!instance) return // worker gone, don't reconnect
-          address = instance.address
+          resolvedAddress = instance.address
         } catch {
           return
         }
       }
 
       if (!this.workers.has(instanceId)) {
-        this.connectToWorker(instanceId, address)
+        this.connectToWorker(instanceId, resolvedAddress)
       }
     }, delay)
   }
