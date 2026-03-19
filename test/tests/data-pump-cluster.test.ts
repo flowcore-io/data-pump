@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert"
-import { afterEach, beforeEach, describe, it } from "@std/testing/bdd"
+import { beforeEach, describe, it } from "@std/testing/bdd"
 import type { FlowcoreDataPumpCoordinator } from "../../src/data-pump/types.ts"
 import {
   DeliveryTracker,
@@ -7,7 +7,6 @@ import {
   serializeMessage,
   type WsAckMessage,
   type WsEventsMessage,
-  type WsMessage,
   type WsPingMessage,
 } from "../../src/data-pump/ws-protocol.ts"
 
@@ -17,47 +16,51 @@ class MockCoordinator implements FlowcoreDataPumpCoordinator {
   private leases = new Map<string, { instanceId: string; expiresAt: number }>()
   private instances = new Map<string, { address: string; lastHeartbeat: number }>()
 
-  async acquireLease(instanceId: string, key: string, ttlMs: number): Promise<boolean> {
+  acquireLease(instanceId: string, key: string, ttlMs: number): Promise<boolean> {
     const existing = this.leases.get(key)
     if (existing && existing.expiresAt > Date.now() && existing.instanceId !== instanceId) {
-      return false
+      return Promise.resolve(false)
     }
     this.leases.set(key, { instanceId, expiresAt: Date.now() + ttlMs })
-    return true
+    return Promise.resolve(true)
   }
 
-  async renewLease(instanceId: string, key: string, ttlMs: number): Promise<boolean> {
+  renewLease(instanceId: string, key: string, ttlMs: number): Promise<boolean> {
     const existing = this.leases.get(key)
     if (!existing || existing.instanceId !== instanceId) {
-      return false
+      return Promise.resolve(false)
     }
     existing.expiresAt = Date.now() + ttlMs
-    return true
+    return Promise.resolve(true)
   }
 
-  async releaseLease(instanceId: string, key: string): Promise<void> {
+  releaseLease(instanceId: string, key: string): Promise<void> {
     const existing = this.leases.get(key)
     if (existing?.instanceId === instanceId) {
       this.leases.delete(key)
     }
+    return Promise.resolve()
   }
 
-  async register(instanceId: string, address: string): Promise<void> {
+  register(instanceId: string, address: string): Promise<void> {
     this.instances.set(instanceId, { address, lastHeartbeat: Date.now() })
+    return Promise.resolve()
   }
 
-  async heartbeat(instanceId: string): Promise<void> {
+  heartbeat(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId)
     if (instance) {
       instance.lastHeartbeat = Date.now()
     }
+    return Promise.resolve()
   }
 
-  async unregister(instanceId: string): Promise<void> {
+  unregister(instanceId: string): Promise<void> {
     this.instances.delete(instanceId)
+    return Promise.resolve()
   }
 
-  async getInstances(staleThresholdMs: number): Promise<Array<{ instanceId: string; address: string }>> {
+  getInstances(staleThresholdMs: number): Promise<Array<{ instanceId: string; address: string }>> {
     const now = Date.now()
     const result: Array<{ instanceId: string; address: string }> = []
     for (const [id, info] of this.instances) {
@@ -65,7 +68,7 @@ class MockCoordinator implements FlowcoreDataPumpCoordinator {
         result.push({ instanceId: id, address: info.address })
       }
     }
-    return result
+    return Promise.resolve(result)
   }
 
   // test helpers

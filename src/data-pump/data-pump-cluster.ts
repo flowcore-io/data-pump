@@ -130,7 +130,7 @@ export class FlowcoreDataPumpCluster {
     }
 
     // stop leader duties
-    await this.stepDownAsLeader()
+    this.stepDownAsLeader()
 
     // close worker connection to leader
     this.leaderConnection?.close()
@@ -220,11 +220,11 @@ export class FlowcoreDataPumpCluster {
           const renewed = await this.coordinator.renewLease(this.instanceId, LEASE_KEY, this.leaseTtlMs)
           if (!renewed) {
             this.logger?.warn("Lease renewal failed, stepping down")
-            await this.stepDownAsLeader()
+            this.stepDownAsLeader()
           }
         } catch (error) {
           this.logger?.error("Lease renewal error, stepping down", { error })
-          await this.stepDownAsLeader()
+          this.stepDownAsLeader()
         }
       } else {
         await this.attemptElection()
@@ -266,7 +266,7 @@ export class FlowcoreDataPumpCluster {
     this.startPumpAsLeader()
   }
 
-  private async stepDownAsLeader(): Promise<void> {
+  private stepDownAsLeader(): void {
     if (!this.isLeader) return
     this.isLeader = false
     clusterMetrics.leaderStatusGauge.set(0)
