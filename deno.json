@@ -32,7 +32,8 @@
       "node_modules",
       "npm",
       ".github",
-      "CHANGELOG.md"
+      "CHANGELOG.md",
+      "integration"
     ],
     "lineWidth": 120,
     "indentWidth": 2,
@@ -42,7 +43,8 @@
   "lint": {
     "exclude": [
       "node_modules",
-      "npm"
+      "npm",
+      "integration"
     ]
   }
 }

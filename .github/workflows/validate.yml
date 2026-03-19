@@ -43,3 +43,38 @@ jobs:
         run: deno test -A
       - name: Validate NPM build
         run: deno run -A bin/build-npm.ts
+
+  integration-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2204
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.FLOWCORE_MACHINE_GITHUB_TOKEN }}
+          submodules: true
+      - name: Setup Deno2
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install Docker
+        run: |
+          if ! command -v docker &>/dev/null; then
+            curl -fsSL https://get.docker.com | sh
+          fi
+          docker version
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+      - name: Run integration tests
+        run: bash integration/run-integration.sh
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl logs -n data-pump-integration-test -l app=data-pump-test --tail=200 || true
+          kubectl logs -n data-pump-integration-test -l app=postgres --tail=100 || true
+      - name: Teardown
+        if: always()
+        run: bash integration/scripts/teardown.sh || true

@@ -1,5 +1,6 @@
 import type { FlowcoreEvent } from "@flowcore/sdk"
 import { FlowcoreDataPump, type FlowcoreDataPumpOptions } from "./data-pump.ts"
+import type { FlowcoreDataSource } from "./data-source.ts"
 import { clusterMetrics } from "./metrics.ts"
 import type { FlowcoreDataPumpCoordinator, FlowcoreLogger } from "./types.ts"
 import { DeliveryTracker, WsConnection, type WsMessage } from "./ws-protocol.ts"
@@ -18,6 +19,7 @@ const DELIVERY_TIMEOUT_MS = 30_000
 export interface FlowcoreDataPumpClusterOptions extends FlowcoreDataPumpOptions {
   coordinator: FlowcoreDataPumpCoordinator
   advertisedAddress: string
+  dataSourceOverride?: FlowcoreDataSource
   leaseTtlMs?: number
   leaseRenewIntervalMs?: number
   heartbeatIntervalMs?: number
@@ -308,7 +310,7 @@ export class FlowcoreDataPumpCluster {
       },
     }
 
-    this.pump = FlowcoreDataPump.create(pumpOptions)
+    this.pump = FlowcoreDataPump.create(pumpOptions, this.options.dataSourceOverride)
     this.pump.start().catch((error) => {
       this.logger?.error("Pump error in leader mode", { error })
     })
