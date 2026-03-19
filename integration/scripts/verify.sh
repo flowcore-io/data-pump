@@ -71,22 +71,22 @@ kubectl exec -n "${NAMESPACE}" "${PG_POD}" -- \
   psql -U postgres -d datapump_test -t -c \
   "SELECT pod_name, COUNT(*) as event_count FROM processed_events GROUP BY pod_name ORDER BY event_count DESC"
 
-# 5. Assert exactly 1 leader
-echo "==> Checking leader election..."
-LEADER_COUNT=0
-for POD in ${PODS}; do
-  HEALTH=$(kubectl exec -n "${NAMESPACE}" "${POD}" -- \
-    curl -s http://localhost:8080/health 2>/dev/null || echo '{}')
-  IS_LEADER=$(echo "${HEALTH}" | grep -o '"isLeader":[a-z]*' | cut -d: -f2)
-  echo "   ${POD}: isLeader=${IS_LEADER}"
-  if [[ "${IS_LEADER}" == "true" ]]; then
-    LEADER_COUNT=$((LEADER_COUNT + 1))
-  fi
-done
+# 5. Assert exactly 1 leader via PG lease table
+echo "==> Checking leader election via lease table..."
+LEADER_COUNT=$(kubectl exec -n "${NAMESPACE}" "${PG_POD}" -- \
+  psql -U postgres -d datapump_test -t -A -c \
+  "SELECT COUNT(*) FROM flowcore_pump_leases WHERE expires_at > NOW()")
+LEADER_COUNT=$(echo "${LEADER_COUNT}" | tr -d '[:space:]')
 
-echo "==> Leader count: ${LEADER_COUNT}"
+echo "==> Active lease count: ${LEADER_COUNT}"
+
+# also show the lease holder
+kubectl exec -n "${NAMESPACE}" "${PG_POD}" -- \
+  psql -U postgres -d datapump_test -t -c \
+  "SELECT key, holder, expires_at FROM flowcore_pump_leases WHERE expires_at > NOW()"
+
 if [[ "${LEADER_COUNT}" -ne 1 ]]; then
-  echo "FAIL: Expected exactly 1 leader, got ${LEADER_COUNT}"
+  echo "FAIL: Expected exactly 1 active lease, got ${LEADER_COUNT}"
   exit 1
 fi
 
