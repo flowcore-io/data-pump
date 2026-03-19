@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.0](https://github.com/flowcore-io/data-pump/compare/v0.16.5...v0.17.0) (2026-03-19)
+
+
+### Features
+
+* add cluster mode with leader election and WebSocket worker mesh ([34ecce7](https://github.com/flowcore-io/data-pump/commit/34ecce7d80413364e96a21c634f103b1da1576c6))
+* cluster mode with leader election & WebSocket worker mesh ([d2e2e47](https://github.com/flowcore-io/data-pump/commit/d2e2e473770f52c59981dcdf4327f1bb96555784))
+
+
+### Bug Fixes
+
+* correct FlowcoreEvent type in test fixture ([3139702](https://github.com/flowcore-io/data-pump/commit/31397024faa7cd259d9c63334f1258b6eceaac96))
+* resolve deno lint issues (require-await, unused imports) ([d5ef0ba](https://github.com/flowcore-io/data-pump/commit/d5ef0bafc6956793579f30e609d09adefb2b6128))
+
 ## [0.16.5](https://github.com/flowcore-io/data-pump/compare/v0.16.4...v0.16.5) (2026-03-18)
 
 
