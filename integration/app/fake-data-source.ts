@@ -8,9 +8,11 @@ import type { FlowcoreDataPumpState } from "../../src/data-pump/types.ts"
 export class FakeDataSource extends FlowcoreDataSource {
   private readonly events: FlowcoreEvent[]
   private readonly timeBucket: string
-  private delivered = false
+  private deliveredIndex = 0
+  private startTime: number
+  private readonly startDelayMs: number
 
-  constructor(totalEvents: number) {
+  constructor(totalEvents: number, startDelayMs = 15000) {
     super({
       auth: { getBearerToken: () => Promise.resolve("fake") },
       dataSource: {
@@ -22,6 +24,8 @@ export class FakeDataSource extends FlowcoreDataSource {
       noTranslation: true,
     })
 
+    this.startDelayMs = startDelayMs
+    this.startTime = Date.now()
     this.timeBucket = format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
     this.events = []
 
@@ -53,13 +57,25 @@ export class FakeDataSource extends FlowcoreDataSource {
     _cursor?: string,
     _includeSensitiveData?: boolean,
   ): Promise<EventListOutput> {
-    if (this.delivered) {
+    // delay event delivery to give the cluster time to form (workers connect)
+    const elapsed = Date.now() - this.startTime
+    if (elapsed < this.startDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, 2000))
       return { events: [], nextCursor: undefined }
     }
-    this.delivered = true
+
+    if (this.deliveredIndex >= this.events.length) {
+      return { events: [], nextCursor: undefined }
+    }
+
+    // deliver in batches of 10 to allow distribution across workers
+    const batchSize = Math.min(10, amount, this.events.length - this.deliveredIndex)
+    const batch = this.events.slice(this.deliveredIndex, this.deliveredIndex + batchSize)
+    this.deliveredIndex += batchSize
+
     return {
-      events: this.events.slice(0, amount),
-      nextCursor: undefined,
+      events: batch,
+      nextCursor: this.deliveredIndex < this.events.length ? String(this.deliveredIndex) : undefined,
     }
   }
 
