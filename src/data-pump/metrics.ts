@@ -62,3 +62,46 @@ export const metrics = {
   eventsPulledSizeBytesCounter,
   sdkCommandsCounter,
 }
+
+// #region Cluster Metrics
+
+const activeWorkersGauge: Gauge<string> = new Gauge({
+  name: "flowcore_data_pump_cluster_active_workers_gauge",
+  help: "The number of active worker connections",
+})
+
+const leaderStatusGauge: Gauge<string> = new Gauge({
+  name: "flowcore_data_pump_cluster_leader_status_gauge",
+  help: "Whether this instance is the leader (1) or not (0)",
+})
+
+const eventsDistributedCounter: Counter<string> = new Counter({
+  name: "flowcore_data_pump_cluster_events_distributed_counter",
+  help: "The number of events distributed to workers",
+})
+
+const workerAcksCounter: Counter<string> = new Counter({
+  name: "flowcore_data_pump_cluster_worker_acks_counter",
+  help: "The number of successful worker acknowledgements",
+})
+
+const workerFailsCounter: Counter<string> = new Counter({
+  name: "flowcore_data_pump_cluster_worker_fails_counter",
+  help: "The number of failed worker deliveries",
+})
+
+dataPumpPromRegistry.registerMetric(activeWorkersGauge)
+dataPumpPromRegistry.registerMetric(leaderStatusGauge)
+dataPumpPromRegistry.registerMetric(eventsDistributedCounter)
+dataPumpPromRegistry.registerMetric(workerAcksCounter)
+dataPumpPromRegistry.registerMetric(workerFailsCounter)
+
+export const clusterMetrics = {
+  activeWorkersGauge,
+  leaderStatusGauge,
+  eventsDistributedCounter,
+  workerAcksCounter,
+  workerFailsCounter,
+}
+
+// #endregion
