@@ -1,6 +1,9 @@
 import type { FlowcoreEvent } from "@flowcore/sdk"
 import { FlowcoreDataPump, type FlowcoreDataPumpOptions } from "./data-pump.ts"
+import type { FlowcoreDataSource } from "./data-source.ts"
 import { clusterMetrics } from "./metrics.ts"
+import { NatsConnectionManager } from "./nats-connection.ts"
+import { NatsDistributionLeader, NatsDistributionWorker } from "./nats-distribution.ts"
 import type { FlowcoreDataPumpCoordinator, FlowcoreLogger } from "./types.ts"
 import { DeliveryTracker, WsConnection, type WsMessage } from "./ws-protocol.ts"
 
@@ -17,11 +20,13 @@ const DELIVERY_TIMEOUT_MS = 30_000
 
 export interface FlowcoreDataPumpClusterOptions extends FlowcoreDataPumpOptions {
   coordinator: FlowcoreDataPumpCoordinator
-  advertisedAddress: string
+  advertisedAddress?: string
+  dataSourceOverride?: FlowcoreDataSource
   leaseTtlMs?: number
   leaseRenewIntervalMs?: number
   heartbeatIntervalMs?: number
   workerConcurrency?: number
+  clusterKey?: string
 }
 
 interface WorkerConnection {
@@ -60,7 +65,17 @@ export class FlowcoreDataPumpCluster {
   private workerHandler?: (events: FlowcoreEvent[]) => Promise<void>
   private workerFailedHandler?: (events: FlowcoreEvent[]) => void | Promise<void>
 
+  // NATS distribution state
+  private natsConnectionManager?: NatsConnectionManager
+  private natsDistLeader?: NatsDistributionLeader
+  private natsDistWorker?: NatsDistributionWorker
+
   constructor(private readonly options: FlowcoreDataPumpClusterOptions) {
+    // validate: WS mode requires advertisedAddress
+    if (!this.useNatsDistribution && !options.advertisedAddress) {
+      throw new Error("advertisedAddress is required when not using NATS distribution (notifier.type !== 'nats')")
+    }
+
     this.instanceId = crypto.randomUUID()
     this.coordinator = options.coordinator
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS
@@ -72,6 +87,16 @@ export class FlowcoreDataPumpCluster {
     // capture user's processor for worker mode
     this.workerHandler = options.processor?.handler
     this.workerFailedHandler = options.processor?.failedHandler
+  }
+
+  private get useNatsDistribution(): boolean {
+    return this.options.notifier?.type === "nats"
+  }
+
+  private get natsDistributionSubject(): string {
+    const key = this.options.clusterKey ??
+      `${this.options.dataSource.tenant}.${this.options.dataSource.dataCore}.${this.options.dataSource.flowType}`
+    return `data-pump.distribute.${key}`
   }
 
   get isRunning(): boolean {
@@ -136,13 +161,34 @@ export class FlowcoreDataPumpCluster {
 
     this.logger?.info("Starting cluster instance", { instanceId: this.instanceId })
 
-    // Step 1: Register in DB
-    await this.coordinator.register(this.instanceId, this.options.advertisedAddress)
+    if (this.useNatsDistribution) {
+      // NATS mode: connect shared NATS, start worker subscription
+      const natsServers = this.options.notifier?.type === "nats" ? this.options.notifier.servers : []
+      this.natsConnectionManager = new NatsConnectionManager(natsServers, this.logger)
+      const conn = await this.natsConnectionManager.connect()
 
-    // Step 2: Start heartbeat
+      // all instances subscribe as workers (leader also processes if no workers pick up)
+      if (this.workerHandler) {
+        this.natsDistWorker = new NatsDistributionWorker(
+          conn,
+          this.natsDistributionSubject,
+          this.workerHandler,
+          this.logger,
+        )
+        this.natsDistWorker.start()
+      }
+
+      // register with placeholder address (not used for routing in NATS mode)
+      await this.coordinator.register(this.instanceId, "nats://distributed")
+    } else {
+      // WS mode: register with actual address
+      await this.coordinator.register(this.instanceId, this.options.advertisedAddress!)
+    }
+
+    // Start heartbeat
     this.startHeartbeat()
 
-    // Step 3: Start leader election loop
+    // Start leader election loop
     this.startElectionLoop()
   }
 
@@ -168,6 +214,17 @@ export class FlowcoreDataPumpCluster {
     // close worker connection to leader
     this.leaderConnection?.close()
     this.leaderConnection = undefined
+
+    // stop NATS distribution
+    this.natsDistWorker?.stop()
+    this.natsDistWorker = undefined
+    this.natsDistLeader = undefined
+
+    // close shared NATS connection
+    if (this.natsConnectionManager) {
+      await this.natsConnectionManager.close()
+      this.natsConnectionManager = undefined
+    }
 
     // unregister
     try {
@@ -253,11 +310,19 @@ export class FlowcoreDataPumpCluster {
     this.leaderConnection?.close()
     this.leaderConnection = undefined
 
-    // start worker discovery
-    this.startWorkerDiscovery()
-
-    // initial discovery
-    await this.discoverWorkers()
+    if (this.useNatsDistribution) {
+      // NATS mode: create leader distributor, no WS discovery needed
+      const conn = await this.natsConnectionManager!.connect()
+      this.natsDistLeader = new NatsDistributionLeader(
+        conn,
+        this.natsDistributionSubject,
+        this.logger,
+      )
+    } else {
+      // WS mode: start worker discovery
+      this.startWorkerDiscovery()
+      await this.discoverWorkers()
+    }
 
     // start the pump with distribution processor
     this.startPumpAsLeader()
@@ -280,7 +345,10 @@ export class FlowcoreDataPumpCluster {
       this.leaseRenewInterval = undefined
     }
 
-    // disconnect all workers
+    // NATS mode: close leader distributor (worker subscription stays)
+    this.natsDistLeader = undefined
+
+    // disconnect all WS workers
     for (const worker of this.workers.values()) {
       worker.deliveryTracker.rejectAll(new Error("Leader stepping down"))
       worker.connection.close()
@@ -308,13 +376,47 @@ export class FlowcoreDataPumpCluster {
       },
     }
 
-    this.pump = FlowcoreDataPump.create(pumpOptions)
+    this.pump = FlowcoreDataPump.create(pumpOptions, this.options.dataSourceOverride)
     this.pump.start().catch((error) => {
       this.logger?.error("Pump error in leader mode", { error })
     })
   }
 
-  private async distributeEvents(events: FlowcoreEvent[]): Promise<void> {
+  private distributeEvents(events: FlowcoreEvent[]): Promise<void> {
+    if (this.useNatsDistribution) {
+      return this.distributeEventsNats(events)
+    }
+    return this.distributeEventsWs(events)
+  }
+
+  private async distributeEventsNats(events: FlowcoreEvent[]): Promise<void> {
+    if (!this.natsDistLeader) {
+      // no NATS leader distributor - process locally as fallback
+      this.logger?.debug("No NATS leader distributor, processing locally")
+      if (this.workerHandler) {
+        await this.workerHandler(events)
+      }
+      return
+    }
+
+    clusterMetrics.eventsDistributedCounter.inc(events.length)
+
+    try {
+      await this.natsDistLeader.distribute(events)
+      clusterMetrics.workerAcksCounter.inc()
+    } catch (error) {
+      clusterMetrics.workerFailsCounter.inc()
+      // fallback to local processing on NATS failure
+      this.logger?.warn("NATS distribution failed, processing locally", {
+        error: error instanceof Error ? error.message : "unknown",
+      })
+      if (this.workerHandler) {
+        await this.workerHandler(events)
+      }
+    }
+  }
+
+  private async distributeEventsWs(events: FlowcoreEvent[]): Promise<void> {
     const worker = this.selectWorker()
 
     if (!worker) {

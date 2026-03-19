@@ -1,7 +1,7 @@
 import { NotificationClient, type NotificationEvent } from "@flowcore/sdk"
-import * as Nats from "nats"
 import { Subject } from "rxjs"
 import { FlowcoreDataSource } from "./data-source.ts"
+import { NatsConnectionManager } from "./nats-connection.ts"
 import type { FlowcoreDataPumpAuth, FlowcoreDataPumpDataSource, FlowcoreLogger } from "./types.ts"
 import { noOpLogger } from "./no-op-logger.ts"
 
@@ -11,6 +11,7 @@ export interface FlowcoreNotifierOptions {
   dataSource: FlowcoreDataPumpDataSource
   auth: FlowcoreDataPumpAuth
   natsServers?: string[]
+  natsConnectionManager?: NatsConnectionManager
   pollerIntervalMs?: number
   timeoutMs?: number
   logger?: FlowcoreLogger
@@ -20,7 +21,7 @@ export interface FlowcoreNotifierOptions {
 
 export class FlowcoreNotifier {
   private dataSource: FlowcoreDataSource
-  private nats?: Nats.NatsConnection
+  private natsManager?: NatsConnectionManager
   private subject?: Subject<NotificationEvent>
   private notificationClient?: NotificationClient
   private eventResolver?: () => void
@@ -34,6 +35,12 @@ export class FlowcoreNotifier {
       directMode: this.options.directMode,
       noTranslation: this.options.noTranslation,
     })
+
+    if (this.options.natsConnectionManager) {
+      this.natsManager = this.options.natsConnectionManager
+    } else if (this.options.natsServers) {
+      this.natsManager = new NatsConnectionManager(this.options.natsServers, this.options.logger)
+    }
   }
 
   public wait(signal?: AbortSignal) {
@@ -57,9 +64,8 @@ export class FlowcoreNotifier {
 
   private async waitNats(signal?: AbortSignal) {
     this.options.logger?.debug("Waiting for nats")
-    if (!this.nats) {
-      this.nats = await Nats.connect({ servers: this.options.natsServers })
-    }
+    const nats = await this.natsManager!.connect()
+
     const dataCoreId = await this.dataSource.getDataCoreId()
     const topics = this.dataSource.eventTypes.map(
       (eventType) => `stored.event.notify.0.${dataCoreId}.${this.dataSource.flowType}.${eventType}`,
@@ -69,10 +75,10 @@ export class FlowcoreNotifier {
       this.eventResolver = resolve
     })
 
-    const subscriptions: Nats.Subscription[] = []
+    const subscriptions: ReturnType<typeof nats.subscribe>[] = []
     for (const topic of topics) {
       subscriptions.push(
-        this.nats.subscribe(topic, {
+        nats.subscribe(topic, {
           callback: () => {
             this.options.logger?.debug(`Received event from nats: ${topic}`)
             this.eventResolver?.()
@@ -90,8 +96,6 @@ export class FlowcoreNotifier {
     for (const subscription of subscriptions) {
       subscription.unsubscribe()
     }
-    this.nats?.close()
-    this.nats = undefined
   }
 
   private onWebSocketEvent(event: NotificationEvent) {

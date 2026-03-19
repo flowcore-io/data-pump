@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-pump-config
+  namespace: data-pump-integration-test
+data:
+  DATABASE_URL: "postgres://postgres:postgres@postgres:5432/datapump_test"
+  TOTAL_EVENTS: "100"
+  NATS_URL: "nats://nats:4222"
