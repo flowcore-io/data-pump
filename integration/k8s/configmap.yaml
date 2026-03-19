@@ -6,3 +6,4 @@ metadata:
 data:
   DATABASE_URL: "postgres://postgres:postgres@postgres:5432/datapump_test"
   TOTAL_EVENTS: "100"
+  NATS_URL: "nats://nats:4222"

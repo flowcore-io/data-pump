@@ -6,7 +6,7 @@ import { FakeDataSource } from "./fake-data-source.ts"
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL") ?? "postgres://postgres:postgres@localhost:5432/datapump_test"
 const POD_NAME = Deno.env.get("POD_NAME") ?? "local-pod"
-const POD_IP = Deno.env.get("POD_IP") ?? "127.0.0.1"
+const NATS_URL = Deno.env.get("NATS_URL")
 const TOTAL_EVENTS = parseInt(Deno.env.get("TOTAL_EVENTS") ?? "100", 10)
 const WS_PORT = parseInt(Deno.env.get("WS_PORT") ?? "8080", 10)
 
@@ -58,7 +58,11 @@ const coordinator = new PostgresCoordinator(db)
 const stateManager = new PostgresStateManager(db)
 const fakeDataSource = new FakeDataSource(TOTAL_EVENTS)
 
+const useNats = !!NATS_URL
+log.info(`Distribution mode: ${useNats ? "NATS" : "WS"}`, { natsUrl: NATS_URL })
+
 // create cluster
+const POD_IP = Deno.env.get("POD_IP") ?? "127.0.0.1"
 const cluster = new FlowcoreDataPumpCluster({
   auth: { getBearerToken: () => Promise.resolve("fake") },
   dataSource: {
@@ -70,7 +74,14 @@ const cluster = new FlowcoreDataPumpCluster({
   stateManager,
   coordinator,
   dataSourceOverride: fakeDataSource,
-  advertisedAddress: `ws://${POD_IP}:${WS_PORT}`,
+  ...(useNats
+    ? {
+      notifier: { type: "nats" as const, servers: [NATS_URL!] },
+    }
+    : {
+      advertisedAddress: `ws://${POD_IP}:${WS_PORT}`,
+      notifier: { type: "poller" as const, intervalMs: 2000 },
+    }),
   noTranslation: true,
   processor: {
     concurrency: 5,
@@ -84,7 +95,6 @@ const cluster = new FlowcoreDataPumpCluster({
       log.info(`Processed ${events.length} events`)
     },
   },
-  notifier: { type: "poller", intervalMs: 2000 },
   leaseTtlMs: 15000,
   leaseRenewIntervalMs: 5000,
   heartbeatIntervalMs: 3000,
@@ -92,7 +102,7 @@ const cluster = new FlowcoreDataPumpCluster({
   logger: log,
 })
 
-// start HTTP + WS server
+// start HTTP server (health endpoint only in NATS mode, health + WS in WS mode)
 Deno.serve({ port: WS_PORT }, (req) => {
   const url = new URL(req.url)
 
@@ -104,12 +114,13 @@ Deno.serve({ port: WS_PORT }, (req) => {
         workerCount: cluster.activeWorkerCount,
         isRunning: cluster.isRunning,
         podName: POD_NAME,
+        distributionMode: useNats ? "nats" : "ws",
       }),
       { headers: { "content-type": "application/json" } },
     )
   }
 
-  if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+  if (!useNats && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
     const { socket, response } = Deno.upgradeWebSocket(req)
     cluster.handleConnection(socket)
     return response
@@ -118,7 +129,7 @@ Deno.serve({ port: WS_PORT }, (req) => {
   return new Response("Not found", { status: 404 })
 })
 
-log.info(`HTTP/WS server listening on :${WS_PORT}`)
+log.info(`HTTP server listening on :${WS_PORT}`)
 
 // start cluster
 await cluster.start()

@@ -1,5 +1,7 @@
-import { assertEquals, assertRejects } from "@std/assert"
+import { assertEquals, assertRejects, assertThrows } from "@std/assert"
 import { beforeEach, describe, it } from "@std/testing/bdd"
+import type { FlowcoreEvent } from "@flowcore/sdk"
+import { FlowcoreDataPumpCluster } from "../../src/data-pump/data-pump-cluster.ts"
 import type { FlowcoreDataPumpCoordinator } from "../../src/data-pump/types.ts"
 import {
   DeliveryTracker,
@@ -9,6 +11,7 @@ import {
   type WsEventsMessage,
   type WsPingMessage,
 } from "../../src/data-pump/ws-protocol.ts"
+import type { NatsDistributionReply, NatsDistributionRequest } from "../../src/data-pump/nats-distribution.ts"
 
 // #region Mock Coordinator
 
@@ -288,6 +291,127 @@ describe("MockCoordinator", () => {
       const instances = await coordinator.getInstances(1)
       assertEquals(instances.length, 0)
     })
+  })
+})
+
+// #endregion
+
+// #region NATS Distribution Tests
+
+describe("NATS Distribution Protocol", () => {
+  const sampleEvents: FlowcoreEvent[] = [
+    {
+      eventId: "e1",
+      eventType: "test",
+      payload: { foo: "bar" },
+      metadata: {},
+      timeBucket: "20250101000000",
+      tenant: "test-tenant",
+      dataCoreId: "test-dc",
+      flowType: "test-flow",
+      validTime: "2025-01-01T00:00:00Z",
+    },
+    {
+      eventId: "e2",
+      eventType: "test",
+      payload: { baz: 42 },
+      metadata: {},
+      timeBucket: "20250101000000",
+      tenant: "test-tenant",
+      dataCoreId: "test-dc",
+      flowType: "test-flow",
+      validTime: "2025-01-01T00:00:01Z",
+    },
+  ]
+
+  it("should serialize and deserialize request format", () => {
+    const request: NatsDistributionRequest = {
+      deliveryId: "d1",
+      events: sampleEvents,
+    }
+    const json = JSON.stringify(request)
+    const parsed = JSON.parse(json) as NatsDistributionRequest
+    assertEquals(parsed.deliveryId, "d1")
+    assertEquals(parsed.events.length, 2)
+    assertEquals(parsed.events[0].eventId, "e1")
+    assertEquals(parsed.events[1].payload, { baz: 42 })
+  })
+
+  it("should serialize and deserialize ack reply", () => {
+    const reply: NatsDistributionReply = { status: "ack" }
+    const json = JSON.stringify(reply)
+    const parsed = JSON.parse(json) as NatsDistributionReply
+    assertEquals(parsed.status, "ack")
+    assertEquals(parsed.error, undefined)
+  })
+
+  it("should serialize and deserialize fail reply", () => {
+    const reply: NatsDistributionReply = { status: "fail", error: "processing error" }
+    const json = JSON.stringify(reply)
+    const parsed = JSON.parse(json) as NatsDistributionReply
+    assertEquals(parsed.status, "fail")
+    assertEquals(parsed.error, "processing error")
+  })
+})
+
+// #endregion
+
+// #region Cluster Options Validation Tests
+
+describe("Cluster Options Validation", () => {
+  const baseOptions = {
+    auth: { getBearerToken: () => Promise.resolve("fake") },
+    dataSource: {
+      tenant: "test",
+      dataCore: "dc",
+      flowType: "ft",
+      eventTypes: ["ev"],
+    },
+    stateManager: {
+      getState: () => null,
+    },
+  }
+
+  it("should throw when WS mode and no advertisedAddress", () => {
+    assertThrows(
+      () =>
+        new FlowcoreDataPumpCluster({
+          ...baseOptions,
+          coordinator: new MockCoordinator(),
+          notifier: { type: "poller", intervalMs: 1000 },
+        }),
+      Error,
+      "advertisedAddress is required",
+    )
+  })
+
+  it("should not throw when WS mode and advertisedAddress provided", () => {
+    const cluster = new FlowcoreDataPumpCluster({
+      ...baseOptions,
+      coordinator: new MockCoordinator(),
+      advertisedAddress: "ws://localhost:8080",
+      notifier: { type: "poller", intervalMs: 1000 },
+    })
+    assertEquals(typeof cluster.id, "string")
+  })
+
+  it("should not throw when NATS mode and no advertisedAddress", () => {
+    const cluster = new FlowcoreDataPumpCluster({
+      ...baseOptions,
+      coordinator: new MockCoordinator(),
+      notifier: { type: "nats", servers: ["nats://localhost:4222"] },
+    })
+    assertEquals(typeof cluster.id, "string")
+  })
+
+  it("should not throw when NATS mode with advertisedAddress (ignored)", () => {
+    const cluster = new FlowcoreDataPumpCluster({
+      ...baseOptions,
+      coordinator: new MockCoordinator(),
+      advertisedAddress: "ws://localhost:8080",
+      notifier: { type: "nats", servers: ["nats://localhost:4222"] },
+    })
+    assertEquals(typeof cluster.id, "string")
   })
 })
 

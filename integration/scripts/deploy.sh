@@ -21,6 +21,13 @@ echo "==> Waiting for PostgreSQL to be ready..."
 kubectl rollout status deployment/postgres -n "${NAMESPACE}" --timeout=120s
 kubectl wait --for=condition=ready pod -l app=postgres -n "${NAMESPACE}" --timeout=120s
 
+echo "==> Deploying NATS..."
+kubectl apply -f "${ROOT_DIR}/integration/k8s/nats.yaml"
+
+echo "==> Waiting for NATS to be ready..."
+kubectl rollout status deployment/nats -n "${NAMESPACE}" --timeout=120s
+kubectl wait --for=condition=ready pod -l app=nats -n "${NAMESPACE}" --timeout=120s
+
 echo "==> Deploying ConfigMap and test app..."
 kubectl apply -f "${ROOT_DIR}/integration/k8s/configmap.yaml"
 kubectl apply -f "${ROOT_DIR}/integration/k8s/test-app.yaml"
