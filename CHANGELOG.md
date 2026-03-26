@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.0](https://github.com/flowcore-io/data-pump/compare/v0.17.0...v0.18.0) (2026-03-26)
+
+
+### Features
+
+* add K8s integration test suite for cluster mode ([9ae9869](https://github.com/flowcore-io/data-pump/commit/9ae98690af3fa7ff4de8ad81fa2f40ba4820274d))
+* add Kubernetes integration test suite for cluster mode ([2012dff](https://github.com/flowcore-io/data-pump/commit/2012dff0ac8acc1e0966d326673d1eb5f961b416))
+* add PulseEmitter for periodic pump status reporting ([3da799b](https://github.com/flowcore-io/data-pump/commit/3da799be0392610768e2b121731d2812efc3c284))
+* unified NATS mode for notification and cluster event distribution ([b616c18](https://github.com/flowcore-io/data-pump/commit/b616c18153680fc7ffe20aa616e37ef366a3b023))
+
+
+### Bug Fixes
+
+* check leader via PG lease table instead of curl ([f2840a0](https://github.com/flowcore-io/data-pump/commit/f2840a021392e2f954533ea56a6188de57b51ef5))
+* delay event delivery to allow cluster formation ([b71f1dc](https://github.com/flowcore-io/data-pump/commit/b71f1dc02eec5f235c239195cf0d766cc5948347))
+* use latest Deno image to support lockfile v5 ([c730f3e](https://github.com/flowcore-io/data-pump/commit/c730f3e4c82d56b9de77331a1f1ecf3c57440096))
+
 ## [0.17.0](https://github.com/flowcore-io/data-pump/compare/v0.16.5...v0.17.0) (2026-03-19)
 
 
