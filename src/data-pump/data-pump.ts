@@ -5,6 +5,7 @@ import { format, startOfHour } from "date-fns"
 import { FlowcoreDataSource } from "./data-source.ts"
 import { metrics } from "./metrics.ts"
 import { FlowcoreNotifier } from "./notifier.ts"
+import { PulseEmitter, type PulseSnapshot } from "./pulse.ts"
 import type {
   FlowcoreDataPumpAuth,
   FlowcoreDataPumpDataSource,
@@ -51,6 +52,11 @@ export interface FlowcoreDataPumpOptions {
   baseUrlOverride?: string
   noTranslation?: boolean
   directMode?: boolean
+  pulse?: {
+    url: string
+    intervalMs?: number
+    pathwayId: string
+  }
 }
 
 interface FlowcoreDataPumpInnerOptions {
@@ -80,6 +86,11 @@ export class FlowcoreDataPump {
   private stopAtState?: FlowcoreDataPumpState
   private isLive = false
   private finallyFailedHandler?: (events: FlowcoreEvent[]) => Promise<void> | void
+  private pulseEmitter?: PulseEmitter
+  private startedAt = 0
+  private acknowledgedCount = 0
+  private failedCount = 0
+  private pulledCount = 0
 
   private constructor(
     public readonly dataSource: FlowcoreDataSource,
@@ -96,6 +107,26 @@ export class FlowcoreDataPump {
 
   public get isRunning(): boolean {
     return this.running
+  }
+
+  public getSnapshot(): PulseSnapshot | null {
+    if (!this.running) return null
+    const reserved = this.buffer.filter((b) => b.status === "reserved").length
+    const sizeBytes = this.buffer.reduce((sum, b) => sum + JSON.stringify(b.event.payload).length, 0)
+    return {
+      pathwayId: this.pulseEmitter ? "" : "", // set by caller
+      flowType: this.dataSource.flowType,
+      timeBucket: this.bufferState.timeBucket,
+      eventId: this.bufferState.eventId,
+      isLive: this.isLive,
+      bufferDepth: this.buffer.length,
+      bufferReserved: reserved,
+      bufferSizeBytes: sizeBytes,
+      acknowledgedTotal: this.acknowledgedCount,
+      failedTotal: this.failedCount,
+      pulledTotal: this.pulledCount,
+      uptimeMs: this.startedAt ? Date.now() - this.startedAt : 0,
+    }
   }
 
   public static create(options: FlowcoreDataPumpOptions, dataSourceOverride?: FlowcoreDataSource): FlowcoreDataPump {
@@ -123,7 +154,7 @@ export class FlowcoreDataPump {
       directMode: options.directMode,
       noTranslation: options.noTranslation,
     })
-    return new FlowcoreDataPump(
+    const pump = new FlowcoreDataPump(
       dataSource,
       notifier,
       options.stateManager,
@@ -138,6 +169,25 @@ export class FlowcoreDataPump {
       },
       options.logger,
     )
+
+    if (options.pulse) {
+      const pathwayId = options.pulse.pathwayId
+      pump.pulseEmitter = new PulseEmitter(
+        {
+          url: options.pulse.url,
+          intervalMs: options.pulse.intervalMs,
+          auth: options.auth,
+          logger: options.logger,
+        },
+        () => {
+          const snapshot = pump.getSnapshot()
+          if (snapshot) snapshot.pathwayId = pathwayId
+          return snapshot
+        },
+      )
+    }
+
+    return pump
   }
 
   public async start(callback?: (error?: Error) => void): Promise<void> {
@@ -146,8 +196,10 @@ export class FlowcoreDataPump {
       throw new Error("Data pump already running")
     }
     this.running = true
+    this.startedAt = Date.now()
     this.nextCursor = undefined
     this.updateMetricsGauges()
+    this.pulseEmitter?.start()
     const currentState = await this.stateManager.getState()
     const timeBucket = currentState
       ? await this.dataSource.getClosestTimeBucket(currentState.timeBucket)
@@ -195,6 +247,7 @@ export class FlowcoreDataPump {
     this.running = false
     this.buffer = []
     this.updateMetricsGauges()
+    this.pulseEmitter?.stop()
     this.abortController?.abort()
     this.waiterBufferThreshold?.()
     if (!isRestart) {
@@ -243,6 +296,7 @@ export class FlowcoreDataPump {
 
       this.logger?.debug(`fetched ${events.length} events`)
 
+      this.pulledCount += events.length
       this.buffer.push(...events.map((event) => ({ event, status: "open" as const, deliveryCount: 0 })))
       this.nextCursor = nextCursor
       this.updateMetricsGauges()
@@ -347,6 +401,7 @@ export class FlowcoreDataPump {
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("acknowledged", event.event.eventType, 1)
+        this.acknowledgedCount++
         return false
       }
       return true
@@ -374,6 +429,7 @@ export class FlowcoreDataPump {
     this.buffer = this.buffer.filter((event) => {
       if (eventIds.includes(event.event.eventId)) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
+        this.failedCount++
         failedEvents.push(event.event)
         return false
       }

@@ -5,7 +5,7 @@
     "jsr:@deno/cache-dir@~0.10.3": "0.10.3",
     "jsr:@deno/dnt@~0.41.3": "0.41.3",
     "jsr:@deno/graph@~0.73.1": "0.73.1",
-    "jsr:@flowcore/sdk@^1.70.0": "1.70.0",
+    "jsr:@flowcore/sdk@^1.78.0": "1.78.0",
     "jsr:@flowcore/time-uuid@~0.1.1": "0.1.2",
     "jsr:@std/assert@0.223": "0.223.0",
     "jsr:@std/assert@0.226": "0.226.0",
@@ -67,8 +67,8 @@
     "@deno/graph@0.73.1": {
       "integrity": "cd69639d2709d479037d5ce191a422eabe8d71bb68b0098344f6b07411c84d41"
     },
-    "@flowcore/sdk@1.70.0": {
-      "integrity": "a0b250ffd252ead5ff92d02e937967e1f4c1e137a67b6f569c9c0d703d88a7e2",
+    "@flowcore/sdk@1.78.0": {
+      "integrity": "1e1c5c7f2aa22f47a5093e324ba21547a451b1702a4a4d0f1bb5e5c8761ac0c9",
       "dependencies": [
         "npm:@sinclair/typebox",
         "npm:rxjs"
@@ -242,7 +242,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@deno/dnt@~0.41.3",
-      "jsr:@flowcore/sdk@^1.70.0",
+      "jsr:@flowcore/sdk@^1.78.0",
       "jsr:@flowcore/time-uuid@~0.1.1",
       "jsr:@std/assert@^1.0.6",
       "jsr:@std/testing@^1.0.6",
