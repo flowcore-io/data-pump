@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/flowcore-io/data-pump/compare/v0.18.1...v0.19.0) (2026-03-27)
+
+
+### Features
+
+* stagger pulse emissions with random initial delay ([ee8e3cf](https://github.com/flowcore-io/data-pump/commit/ee8e3cf988bb9d71451daa46ca43c54b2a44e57e))
+
 ## [0.18.1](https://github.com/flowcore-io/data-pump/compare/v0.18.0...v0.18.1) (2026-03-27)
 
 
