@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/flowcore-io/data-pump/compare/v0.18.0...v0.18.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* include error message in pulse emission warning log ([5019c70](https://github.com/flowcore-io/data-pump/commit/5019c70c40dc49320b4075ea7ee53eec853453e4))
+
 ## [0.18.0](https://github.com/flowcore-io/data-pump/compare/v0.17.0...v0.18.0) (2026-03-26)
 
 
