@@ -42,7 +42,8 @@ export class PulseEmitter {
 
     this.interval = setInterval(() => {
       this.emit().catch((err) => {
-        this.logger?.warn?.("Pulse emission failed", { error: err instanceof Error ? err.message : String(err) })
+        const msg = err instanceof Error ? err.message : String(err)
+        this.logger?.warn?.(`Pulse emission failed: ${msg}`)
       })
     }, this.intervalMs)
   }
