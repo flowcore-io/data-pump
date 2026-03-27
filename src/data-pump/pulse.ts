@@ -26,6 +26,7 @@ export interface PulseSnapshot {
 
 export class PulseEmitter {
   private interval: ReturnType<typeof setInterval> | null = null
+  private startTimeout: ReturnType<typeof setTimeout> | null = null
   private readonly intervalMs: number
   private readonly logger?: FlowcoreLogger
 
@@ -38,21 +39,33 @@ export class PulseEmitter {
   }
 
   start(): void {
-    if (this.interval) return
+    if (this.interval || this.startTimeout) return
 
-    this.interval = setInterval(() => {
-      this.emit().catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        this.logger?.warn?.(`Pulse emission failed: ${msg}`)
-      })
-    }, this.intervalMs)
+    // Random initial delay to stagger pulses from multiple pumps
+    const initialDelay = Math.floor(Math.random() * this.intervalMs)
+    this.startTimeout = setTimeout(() => {
+      this.startTimeout = null
+      this.emitSafe()
+      this.interval = setInterval(() => this.emitSafe(), this.intervalMs)
+    }, initialDelay)
   }
 
   stop(): void {
+    if (this.startTimeout) {
+      clearTimeout(this.startTimeout)
+      this.startTimeout = null
+    }
     if (this.interval) {
       clearInterval(this.interval)
       this.interval = null
     }
+  }
+
+  private emitSafe(): void {
+    this.emit().catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger?.warn?.(`Pulse emission failed: ${msg}`)
+    })
   }
 
   private async emit(): Promise<void> {
