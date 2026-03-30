@@ -13,7 +13,8 @@ export function getFlowcoreClient(auth: FlowcoreDataPumpAuth, baseUrlOverride?: 
   const client = "apiKey" in auth
     ? new FlowcoreClientWithMetrics({
       apiKey: auth.apiKey,
-      apiKeyId: auth.apiKeyId as string,
+      // apiKeyId is guaranteed to be set — FlowcoreDataPump.create() parses it from fc_ keys
+      apiKeyId: auth.apiKeyId!,
     })
     : new FlowcoreClientWithMetrics(auth)
 
