@@ -143,7 +143,8 @@ export class FlowcoreNotifier {
     if ("apiKey" in this.options.auth) {
       return {
         apiKey: this.options.auth.apiKey,
-        apiKeyId: this.options.auth.apiKeyId as string,
+        // apiKeyId is guaranteed to be set — FlowcoreDataPump.create() parses it from fc_ keys
+        apiKeyId: this.options.auth.apiKeyId!,
       }
     }
     const getBearerToken = this.options.auth.getBearerToken
