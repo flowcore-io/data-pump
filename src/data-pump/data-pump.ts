@@ -91,6 +91,7 @@ export class FlowcoreDataPump {
   private acknowledgedCount = 0
   private failedCount = 0
   private pulledCount = 0
+  private processLoopRestartAttempts = 0
 
   private constructor(
     public readonly dataSource: FlowcoreDataSource,
@@ -220,10 +221,7 @@ export class FlowcoreDataPump {
     }
 
     if (this.options.processor) {
-      this.processLoop().catch((error) => {
-        this.logger?.error("Error in processor", { error })
-        this.stop()
-      })
+      this.startProcessLoop()
     }
 
     if (!callback) {
@@ -245,6 +243,7 @@ export class FlowcoreDataPump {
 
   public stop(isRestart = false): void {
     this.running = false
+    this.processLoopRestartAttempts = 0
     this.buffer = []
     this.updateMetricsGauges()
     this.pulseEmitter?.stop()
@@ -499,12 +498,27 @@ export class FlowcoreDataPump {
 
   // #region Pusher
 
+  private startProcessLoop(): void {
+    this.processLoop().catch((error) => {
+      this.logger?.error("Error in processor", { error })
+      if (!this.running) return
+      this.processLoopRestartAttempts++
+      const delay = Math.min(1_000 * Math.pow(2, this.processLoopRestartAttempts - 1), 30_000)
+      this.logger?.warn(`Restarting process loop in ${delay}ms (attempt ${this.processLoopRestartAttempts})`)
+      setTimeout(() => {
+        if (!this.running) return
+        this.startProcessLoop()
+      }, delay)
+    })
+  }
+
   private async processLoop() {
     while (this.running) {
       try {
         const events = await this.reserve(this.options.processor?.concurrency ?? 1)
         await this.options.processor?.handler(events)
         await this.acknowledge(events.map((event) => event.eventId))
+        this.processLoopRestartAttempts = 0
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error"
         this.logger?.error(`Failed to process events: ${errorMessage}`)

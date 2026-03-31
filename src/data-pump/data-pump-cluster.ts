@@ -65,6 +65,8 @@ export class FlowcoreDataPumpCluster {
   private workerHandler?: (events: FlowcoreEvent[]) => Promise<void>
   private workerFailedHandler?: (events: FlowcoreEvent[]) => void | Promise<void>
 
+  private pumpRestartAttempts = 0
+
   // NATS distribution state
   private natsConnectionManager?: NatsConnectionManager
   private natsDistLeader?: NatsDistributionLeader
@@ -361,6 +363,8 @@ export class FlowcoreDataPumpCluster {
       this.pump.stop()
       this.pump = undefined
     }
+
+    this.pumpRestartAttempts = 0
   }
 
   private startPumpAsLeader(): void {
@@ -370,6 +374,7 @@ export class FlowcoreDataPumpCluster {
       processor: {
         concurrency: this.workerConcurrency,
         handler: async (events: FlowcoreEvent[]) => {
+          this.pumpRestartAttempts = 0
           await this.distributeEvents(events)
         },
         failedHandler: this.workerFailedHandler,
@@ -379,6 +384,14 @@ export class FlowcoreDataPumpCluster {
     this.pump = FlowcoreDataPump.create(pumpOptions, this.options.dataSourceOverride)
     this.pump.start().catch((error) => {
       this.logger?.error("Pump error in leader mode", { error })
+      if (!this.running || !this.isLeader) return
+      this.pumpRestartAttempts++
+      const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, this.pumpRestartAttempts - 1), RECONNECT_MAX_MS)
+      this.logger?.warn(`Restarting leader pump in ${delay}ms (attempt ${this.pumpRestartAttempts})`)
+      setTimeout(() => {
+        if (!this.running || !this.isLeader) return
+        this.startPumpAsLeader()
+      }, delay)
     })
   }
 
