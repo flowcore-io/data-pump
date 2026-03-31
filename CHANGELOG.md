@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/flowcore-io/data-pump/compare/v0.19.0...v0.19.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* restart processLoop and leader pump on error with exponential backoff ([#66](https://github.com/flowcore-io/data-pump/issues/66)) ([980770f](https://github.com/flowcore-io/data-pump/commit/980770fc53dbc416faf3fc2939d146442d756965))
+
 ## [0.19.0](https://github.com/flowcore-io/data-pump/compare/v0.18.1...v0.19.0) (2026-03-27)
 
 
