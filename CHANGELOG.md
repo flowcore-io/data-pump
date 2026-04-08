@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/flowcore-io/data-pump/compare/v0.19.1...v0.20.0) (2026-04-08)
+
+
+### Features
+
+* configurable log levels for pulse success and failure ([#68](https://github.com/flowcore-io/data-pump/issues/68)) ([71fe82a](https://github.com/flowcore-io/data-pump/commit/71fe82a0a9976b018fd71d5fd54b98cf9b6d5017))
+
 ## [0.19.1](https://github.com/flowcore-io/data-pump/compare/v0.19.0...v0.19.1) (2026-03-31)
 
 
