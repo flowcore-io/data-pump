@@ -2,11 +2,20 @@ import { SendPumpPulseCommand } from "@flowcore/sdk"
 import type { FlowcoreDataPumpAuth, FlowcoreLogger } from "./types.ts"
 import { getFlowcoreClient } from "./flowcore-client.ts"
 
+/**
+ * Log level for pulse emitter events. Corresponds to FlowcoreLogger methods.
+ */
+export type PulseLogLevel = "debug" | "info" | "warn" | "error"
+
 export interface PulseEmitterOptions {
   url: string
   intervalMs?: number
   auth: FlowcoreDataPumpAuth
   logger?: FlowcoreLogger
+  /** Log level for successful pulses. Defaults to 'debug'. */
+  successLogLevel?: PulseLogLevel
+  /** Log level for pulse failures. Defaults to 'warn'. */
+  failureLogLevel?: PulseLogLevel
 }
 
 export interface PulseSnapshot {
@@ -29,6 +38,8 @@ export class PulseEmitter {
   private startTimeout: ReturnType<typeof setTimeout> | null = null
   private readonly intervalMs: number
   private readonly logger?: FlowcoreLogger
+  private readonly successLogLevel: PulseLogLevel
+  private readonly failureLogLevel: PulseLogLevel
 
   constructor(
     private readonly options: PulseEmitterOptions,
@@ -36,6 +47,8 @@ export class PulseEmitter {
   ) {
     this.intervalMs = options.intervalMs ?? 30_000
     this.logger = options.logger
+    this.successLogLevel = options.successLogLevel ?? "debug"
+    this.failureLogLevel = options.failureLogLevel ?? "warn"
   }
 
   start(): void {
@@ -63,8 +76,14 @@ export class PulseEmitter {
 
   private emitSafe(): void {
     this.emit().catch((err) => {
+      const snapshot = this.getSnapshot()
       const msg = err instanceof Error ? err.message : String(err)
-      this.logger?.warn?.(`Pulse emission failed: ${msg}`)
+      this.logger?.[this.failureLogLevel]?.("Pulse emission failed", {
+        error: msg,
+        url: this.options.url,
+        pathwayId: snapshot?.pathwayId,
+        flowType: snapshot?.flowType,
+      })
     })
   }
 
@@ -94,5 +113,13 @@ export class PulseEmitter {
         uptimeMs: snapshot.uptimeMs,
       }),
     )
+
+    this.logger?.[this.successLogLevel]?.("Pulse sent", {
+      pathwayId: snapshot.pathwayId,
+      flowType: snapshot.flowType,
+      timeBucket: snapshot.timeBucket,
+      isLive: snapshot.isLive,
+      bufferDepth: snapshot.bufferDepth,
+    })
   }
 }
