@@ -56,6 +56,10 @@ export interface FlowcoreDataPumpOptions {
     url: string
     intervalMs?: number
     pathwayId: string
+    /** Log level for successful pulses. Defaults to 'debug'. */
+    successLogLevel?: "debug" | "info" | "warn" | "error"
+    /** Log level for pulse failures. Defaults to 'warn'. */
+    failureLogLevel?: "debug" | "info" | "warn" | "error"
   }
 }
 
@@ -179,6 +183,8 @@ export class FlowcoreDataPump {
           intervalMs: options.pulse.intervalMs,
           auth: options.auth,
           logger: options.logger,
+          successLogLevel: options.pulse.successLogLevel,
+          failureLogLevel: options.pulse.failureLogLevel,
         },
         () => {
           const snapshot = pump.getSnapshot()
