@@ -56,6 +56,7 @@ export interface FlowcoreDataPumpOptions {
     url: string
     intervalMs?: number
     pathwayId: string
+    sourceId?: string
     /** Log level for successful pulses. Defaults to 'debug'. */
     successLogLevel?: "debug" | "info" | "warn" | "error"
     /** Log level for pulse failures. Defaults to 'warn'. */
@@ -177,6 +178,7 @@ export class FlowcoreDataPump {
 
     if (options.pulse) {
       const pathwayId = options.pulse.pathwayId
+      const sourceId = options.pulse.sourceId
       pump.pulseEmitter = new PulseEmitter(
         {
           url: options.pulse.url,
@@ -188,7 +190,10 @@ export class FlowcoreDataPump {
         },
         () => {
           const snapshot = pump.getSnapshot()
-          if (snapshot) snapshot.pathwayId = pathwayId
+          if (snapshot) {
+            snapshot.pathwayId = pathwayId
+            snapshot.sourceId = sourceId
+          }
           return snapshot
         },
       )
