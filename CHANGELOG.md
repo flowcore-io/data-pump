@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/flowcore-io/data-pump/compare/v0.20.0...v0.21.0) (2026-04-24)
+
+
+### Features
+
+* thread sourceId through PulseEmitter ([#70](https://github.com/flowcore-io/data-pump/issues/70)) ([119f364](https://github.com/flowcore-io/data-pump/commit/119f3641fc3c9360b8581e512dcb6ebbb6e4cda1))
+
 ## [0.20.0](https://github.com/flowcore-io/data-pump/compare/v0.19.1...v0.20.0) (2026-04-08)
 
 
