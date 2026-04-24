@@ -20,6 +20,7 @@ export interface PulseEmitterOptions {
 
 export interface PulseSnapshot {
   pathwayId: string
+  sourceId?: string
   flowType: string
   timeBucket: string
   eventId: string | undefined
@@ -93,25 +94,31 @@ export class PulseEmitter {
 
     const client = getFlowcoreClient(this.options.auth, this.options.url)
 
+    // sourceId is accepted by the server (data-pathways CP) and added to
+    // @flowcore/sdk's SendPumpPulseInput on the 3.x train. data-pump is still
+    // pinned to sdk ^1.78.0, so we widen the literal type locally until the
+    // sdk-3 migration lands. Remove the cast then.
+    const input = {
+      pathwayId: snapshot.pathwayId,
+      sourceId: snapshot.sourceId,
+      flowType: snapshot.flowType,
+      timeBucket: snapshot.timeBucket,
+      eventId: snapshot.eventId ?? null,
+      isLive: snapshot.isLive,
+      buffer: {
+        depth: snapshot.bufferDepth,
+        reserved: snapshot.bufferReserved,
+        sizeBytes: snapshot.bufferSizeBytes,
+      },
+      counters: {
+        acknowledged: snapshot.acknowledgedTotal,
+        failed: snapshot.failedTotal,
+        pulled: snapshot.pulledTotal,
+      },
+      uptimeMs: snapshot.uptimeMs,
+    }
     await client.execute(
-      new SendPumpPulseCommand({
-        pathwayId: snapshot.pathwayId,
-        flowType: snapshot.flowType,
-        timeBucket: snapshot.timeBucket,
-        eventId: snapshot.eventId ?? null,
-        isLive: snapshot.isLive,
-        buffer: {
-          depth: snapshot.bufferDepth,
-          reserved: snapshot.bufferReserved,
-          sizeBytes: snapshot.bufferSizeBytes,
-        },
-        counters: {
-          acknowledged: snapshot.acknowledgedTotal,
-          failed: snapshot.failedTotal,
-          pulled: snapshot.pulledTotal,
-        },
-        uptimeMs: snapshot.uptimeMs,
-      }),
+      new SendPumpPulseCommand(input as ConstructorParameters<typeof SendPumpPulseCommand>[0]),
     )
 
     this.logger?.[this.successLogLevel]?.("Pulse sent", {
