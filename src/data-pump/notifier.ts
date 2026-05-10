@@ -106,13 +106,21 @@ export class FlowcoreNotifier {
 
   private async waitWebSocket(signal?: AbortSignal) {
     this.options.logger?.debug("Waiting for web socket")
+
+    const promise = new Promise<void>((resolve) => {
+      this.eventResolver = resolve
+    })
+
     this.subject = new Subject<NotificationEvent>()
     this.subject.subscribe({
       next: this.onWebSocketEvent.bind(this),
-      error: (error: Error) => this.options.logger?.error("Notification stream error:", { error }),
+      error: (error: Error) => {
+        this.options.logger?.error("Notification stream error:", { error })
+        this.eventResolver?.()
+      },
     })
 
-    this.notificationClient = new NotificationClient(
+    this.notificationClient = _internals.createNotificationClient(
       this.subject,
       this.webSocketAuth(),
       {
@@ -126,17 +134,17 @@ export class FlowcoreNotifier {
       },
     )
 
-    await this.notificationClient.connect()
-
-    const promise = new Promise<void>((resolve) => {
-      this.eventResolver = resolve
-    })
-    clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-    signal?.addEventListener("abort", () => this.eventResolver?.())
-    await promise
-    this.eventResolver = undefined
-    this.notificationClient.disconnect()
+    try {
+      await this.notificationClient.connect()
+      clearTimeout(this.timer)
+      this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+      signal?.addEventListener("abort", () => this.eventResolver?.())
+      await promise
+    } finally {
+      clearTimeout(this.timer)
+      this.eventResolver = undefined
+      this.notificationClient.disconnect()
+    }
   }
 
   private webSocketAuth() {
@@ -156,4 +164,17 @@ export class FlowcoreNotifier {
       },
     }
   }
+}
+
+/**
+ * Test seam for stubbing the NotificationClient constructor. Production code
+ * routes through `_internals.createNotificationClient`; tests replace this
+ * property with a fake factory to drive the subject manually. Not part of the
+ * public API.
+ */
+// deno-lint-ignore no-explicit-any
+type NotificationClientFactory = (...args: any[]) => NotificationClient
+export const _internals: { createNotificationClient: NotificationClientFactory } = {
+  createNotificationClient: (...args) =>
+    new (NotificationClient as new (...a: unknown[]) => NotificationClient)(...args),
 }
