@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/flowcore-io/data-pump/compare/v0.21.0...v0.21.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* **notifier:** resolve waitWebSocket promise on WS error to prevent pull-loop wedge ([#72](https://github.com/flowcore-io/data-pump/issues/72)) ([d76ee0f](https://github.com/flowcore-io/data-pump/commit/d76ee0f0b5431f6a250a46948ad0c39693135c9c))
+
 ## [0.21.0](https://github.com/flowcore-io/data-pump/compare/v0.20.0...v0.21.0) (2026-04-24)
 
 
