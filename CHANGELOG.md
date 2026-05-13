@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2](https://github.com/flowcore-io/data-pump/compare/v0.21.1...v0.21.2) (2026-05-13)
+
+
+### Bug Fixes
+
+* **data-pump:** self-heal main fetch loop on error and validate restart input ([#74](https://github.com/flowcore-io/data-pump/issues/74)) ([7fbbe1d](https://github.com/flowcore-io/data-pump/commit/7fbbe1d25851eef4003051aa34e48a93d1669172))
+
 ## [0.21.1](https://github.com/flowcore-io/data-pump/compare/v0.21.0...v0.21.1) (2026-05-10)
 
 
