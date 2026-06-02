@@ -129,7 +129,7 @@ export class FlowcoreNotifier {
         flowType: this.dataSource.flowType,
       },
       {
-        logger: this.options.logger ?? noOpLogger,
+        logger: createNotificationClientLogger(this.options.logger ?? noOpLogger),
         reconnectInterval: 1000,
       },
     )
@@ -164,6 +164,25 @@ export class FlowcoreNotifier {
       },
     }
   }
+}
+
+function createNotificationClientLogger(logger: FlowcoreLogger): FlowcoreLogger {
+  return {
+    debug: (message, metadata) => logger.debug(message, metadata),
+    info: (message, metadata) => {
+      if (isNormalNotificationLifecycleInfo(message)) {
+        logger.debug(message, metadata)
+        return
+      }
+      logger.info(message, metadata)
+    },
+    warn: (message, metadata) => logger.warn(message, metadata),
+    error: (message, metadata) => logger.error(message, metadata),
+  }
+}
+
+function isNormalNotificationLifecycleInfo(message: string): boolean {
+  return message === "WebSocket connection opened." || message.startsWith("Connection closed:")
 }
 
 /**

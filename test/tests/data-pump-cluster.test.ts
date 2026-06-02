@@ -2,7 +2,7 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert"
 import { beforeEach, describe, it } from "@std/testing/bdd"
 import type { FlowcoreEvent } from "@flowcore/sdk"
 import { FlowcoreDataPumpCluster } from "../../src/data-pump/data-pump-cluster.ts"
-import type { FlowcoreDataPumpCoordinator } from "../../src/data-pump/types.ts"
+import type { FlowcoreDataPumpCoordinator, FlowcoreLogger } from "../../src/data-pump/types.ts"
 import {
   DeliveryTracker,
   deserializeMessage,
@@ -91,6 +91,33 @@ class MockCoordinator implements FlowcoreDataPumpCoordinator {
 }
 
 // #endregion
+
+function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof FlowcoreLogger, string[]> } {
+  const calls: Record<keyof FlowcoreLogger, string[]> = {
+    debug: [],
+    info: [],
+    warn: [],
+    error: [],
+  }
+  return {
+    calls,
+    debug: (message) => calls.debug.push(message),
+    info: (message) => calls.info.push(message),
+    warn: (message) => calls.warn.push(message),
+    error: (message) => calls.error.push(String(message)),
+  }
+}
+
+function createFakeWebSocket(): WebSocket {
+  return {
+    readyState: WebSocket.OPEN,
+    send: () => {},
+    close: () => {},
+    onmessage: null,
+    onclose: null,
+    onerror: null,
+  } as unknown as WebSocket
+}
 
 // #region WS Protocol Tests
 
@@ -416,3 +443,32 @@ describe("Cluster Options Validation", () => {
 })
 
 // #endregion
+
+describe("Cluster lifecycle logging", () => {
+  it("logs leader connection close as debug, not info", () => {
+    const logger = createRecordingLogger()
+    const ws = createFakeWebSocket()
+    const cluster = new FlowcoreDataPumpCluster({
+      auth: { getBearerToken: () => Promise.resolve("fake") },
+      dataSource: {
+        tenant: "test",
+        dataCore: "dc",
+        flowType: "ft",
+        eventTypes: ["ev"],
+      },
+      stateManager: {
+        getState: () => null,
+      },
+      coordinator: new MockCoordinator(),
+      advertisedAddress: "ws://localhost:8080",
+      notifier: { type: "poller", intervalMs: 1000 },
+      logger,
+    })
+
+    cluster.handleConnection(ws)
+    ws.onclose?.(new CloseEvent("close"))
+
+    assertEquals(logger.calls.debug.includes("Leader connection closed"), true)
+    assertEquals(logger.calls.info.includes("Leader connection closed"), false)
+  })
+})

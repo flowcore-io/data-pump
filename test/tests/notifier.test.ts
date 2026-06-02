@@ -4,6 +4,7 @@ import { stub } from "@std/testing/mock"
 import type { NotificationClient, NotificationEvent } from "@flowcore/sdk"
 import type { Subject } from "rxjs"
 import { _internals, FlowcoreNotifier } from "../../src/data-pump/notifier.ts"
+import type { FlowcoreLogger } from "../../src/data-pump/types.ts"
 
 // #region Test Helpers
 
@@ -12,6 +13,7 @@ const FAKE_API_KEY = "fc_testid_testsecret"
 interface FakeClientHandle {
   client: NotificationClient
   subject: Subject<NotificationEvent>
+  options: unknown
   connectCalls: number
   disconnectCalls: number
   // Triggers fired automatically as part of connect(). The factory runs each
@@ -34,11 +36,12 @@ function createFakeFactory(config: FakeFactoryConfig) {
     observer: Subject<NotificationEvent>,
     _auth: unknown,
     _spec: unknown,
-    _opts: unknown,
+    opts: unknown,
   ): NotificationClient => {
     const handle: FakeClientHandle = {
       client: null as unknown as NotificationClient,
       subject: observer,
+      options: opts,
       connectCalls: 0,
       disconnectCalls: 0,
       pendingPostConnect: [],
@@ -70,7 +73,23 @@ function createFakeFactory(config: FakeFactoryConfig) {
   return { factory, handles }
 }
 
-function createNotifier(timeoutMs?: number): FlowcoreNotifier {
+function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof FlowcoreLogger, string[]> } {
+  const calls: Record<keyof FlowcoreLogger, string[]> = {
+    debug: [],
+    info: [],
+    warn: [],
+    error: [],
+  }
+  return {
+    calls,
+    debug: (message) => calls.debug.push(message),
+    info: (message) => calls.info.push(message),
+    warn: (message) => calls.warn.push(message),
+    error: (message) => calls.error.push(String(message)),
+  }
+}
+
+function createNotifier(timeoutMs?: number, logger?: FlowcoreLogger): FlowcoreNotifier {
   return new FlowcoreNotifier({
     auth: { apiKey: FAKE_API_KEY, apiKeyId: "testid" },
     dataSource: {
@@ -81,7 +100,7 @@ function createNotifier(timeoutMs?: number): FlowcoreNotifier {
     },
     noTranslation: true,
     timeoutMs,
-    logger: {
+    logger: logger ?? {
       debug: () => {},
       info: () => {},
       warn: () => {},
@@ -430,5 +449,30 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
     // connect() then throws, so wait() rejects. This is the documented invariant.
     assertStrictEquals(rejected?.message, "connect failed")
     assertEquals(resolvedCleanly, false)
+  })
+
+  it("demotes normal SDK notification lifecycle info logs to debug", async () => {
+    const logger = createRecordingLogger()
+    const { factory } = createFakeFactory({
+      onCreate: (h) => {
+        h.pendingPostConnect.push((handle) => {
+          const sdkLogger = (handle.options as { logger: FlowcoreLogger }).logger
+          sdkLogger.info("WebSocket connection opened.", { source: "sdk" })
+          sdkLogger.info("Connection closed: Code [1000], Reason: Disconnected by user", { source: "sdk" })
+          sdkLogger.info("Attempting reconnection 1 in 1000 ms...", { source: "sdk" })
+          handle.subject.error(new Error("done"))
+        })
+      },
+    })
+    factoryStub = stub(_internals, "createNotificationClient", factory)
+
+    const notifier = createNotifier(20_000, logger)
+    await notifier.wait()
+
+    assertEquals(logger.calls.debug.includes("WebSocket connection opened."), true)
+    assertEquals(logger.calls.debug.includes("Connection closed: Code [1000], Reason: Disconnected by user"), true)
+    assertEquals(logger.calls.info.includes("WebSocket connection opened."), false)
+    assertEquals(logger.calls.info.includes("Connection closed: Code [1000], Reason: Disconnected by user"), false)
+    assertEquals(logger.calls.info.includes("Attempting reconnection 1 in 1000 ms..."), true)
   })
 })
