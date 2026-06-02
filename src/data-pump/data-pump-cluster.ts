@@ -147,7 +147,7 @@ export class FlowcoreDataPumpCluster {
       logger: this.logger,
       onMessage: (msg) => this.handleWorkerMessage(msg, conn),
       onClose: () => {
-        this.logger?.info("Leader connection closed")
+        this.logger?.debug("Leader connection closed")
         this.leaderConnection = undefined
       },
     })
@@ -524,7 +524,7 @@ export class FlowcoreDataPumpCluster {
   }
 
   private connectToWorker(instanceId: string, address: string): void {
-    this.logger?.info("Connecting to worker", { instanceId, address })
+    this.logger?.debug("Connecting to worker", { instanceId, address })
 
     try {
       const ws = new WebSocket(address)
@@ -548,7 +548,7 @@ export class FlowcoreDataPumpCluster {
         workerConn.reconnectAttempts = 0
         this.workers.set(instanceId, workerConn)
         clusterMetrics.activeWorkersGauge.set(this.workers.size)
-        this.logger?.info("Connected to worker", { instanceId })
+        this.logger?.debug("Connected to worker", { instanceId })
       }
 
       ws.onerror = () => {
@@ -564,7 +564,7 @@ export class FlowcoreDataPumpCluster {
     const worker = this.workers.get(instanceId)
     if (!worker) return
 
-    this.logger?.info("Worker disconnected", { instanceId })
+    this.logger?.debug("Worker disconnected", { instanceId })
 
     // reject all pending deliveries - pump's ack timeout will handle reOpen
     worker.deliveryTracker.rejectAll(new Error("Worker disconnected"))
