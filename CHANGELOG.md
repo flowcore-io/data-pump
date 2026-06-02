@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.3](https://github.com/flowcore-io/data-pump/compare/v0.21.2...v0.21.3) (2026-06-02)
+
+
+### Bug Fixes
+
+* demote lifecycle logs ([#76](https://github.com/flowcore-io/data-pump/issues/76)) ([8c20a9f](https://github.com/flowcore-io/data-pump/commit/8c20a9fcc1dfc4fa381ae3686db7e87ceeb3bfe4))
+
 ## [0.21.2](https://github.com/flowcore-io/data-pump/compare/v0.21.1...v0.21.2) (2026-05-13)
 
 
