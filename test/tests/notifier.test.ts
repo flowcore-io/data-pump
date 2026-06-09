@@ -24,6 +24,10 @@ interface FakeClientHandle {
   connectError?: Error
   // If true, subject.error fires BEFORE connect() resolves (synchronous race).
   errorBeforeConnect?: Error
+  // If true, connect() returns a promise that never resolves (simulates a
+  // hung websocket reconnect — half-open / black-holed socket). This is the
+  // production wedge: pre-fix, `await connect()` blocks the loop forever.
+  hangConnect?: boolean
 }
 
 type FakeFactoryConfig = {
@@ -52,6 +56,10 @@ function createFakeFactory(config: FakeFactoryConfig) {
         handle.connectCalls++
         if (handle.errorBeforeConnect) {
           handle.subject.error(handle.errorBeforeConnect)
+        }
+        if (handle.hangConnect) {
+          // Never resolves — simulates a hung reconnect.
+          await new Promise<void>(() => {})
         }
         if (handle.connectError) {
           throw handle.connectError
@@ -449,6 +457,96 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
     // connect() then throws, so wait() rejects. This is the documented invariant.
     assertStrictEquals(rejected?.message, "connect failed")
     assertEquals(resolvedCleanly, false)
+  })
+
+  it("case 9 — hung connect() must not wedge: wait() resolves via the pre-armed timeout", async () => {
+    // Production wedge: a reconnect whose connect() never resolves. Pre-fix, the
+    // 20s re-poll timer is armed only AFTER connect() resolves, so the loop hangs
+    // forever. Post-fix, timer + abort are armed BEFORE connect(), so wait()
+    // resolves at timeoutMs and the loop re-polls.
+    const handles: FakeClientHandle[] = []
+    const { factory } = createFakeFactory({
+      onCreate: (h) => {
+        h.hangConnect = true
+        handles.push(h)
+      },
+    })
+    factoryStub = stub(_internals, "createNotificationClient", factory)
+
+    const notifier = createNotifier(30)
+    // Safety: if the bug is present, wait() hangs. Force-resolve at 250ms so the
+    // runner doesn't stall — the elapsed assertion then fails (proving the wedge).
+    const safety = setTimeout(() => {
+      const r = (notifier as unknown as { eventResolver?: () => void }).eventResolver
+      r?.()
+    }, 250)
+
+    const start = Date.now()
+    await notifier.wait()
+    const elapsed = Date.now() - start
+    clearTimeout(safety)
+
+    assert(elapsed >= 25, `expected resolve via ~30ms timeout, got ${elapsed} ms`)
+    assert(elapsed < 200, `hung connect must not wedge — expected < 200 ms, got ${elapsed} ms`)
+    assertEquals(handles.length, 1)
+    assertEquals(handles[0].disconnectCalls, 1, "disconnect must run via try/finally even on hung connect")
+  })
+
+  it("case 10 — retries while degraded, then returns to WS mode on reconnect", async () => {
+    // Cycle 1: connect() hangs (degraded → resolves via timeout re-poll).
+    // Cycle 2: connect() succeeds and delivers an event (back in push/WS mode).
+    // Proves there is no sticky poll-mode state and each cycle builds a fresh client.
+    const handles: FakeClientHandle[] = []
+    let cycle = 0
+    const { factory } = createFakeFactory({
+      onCreate: (h) => {
+        cycle++
+        if (cycle === 1) {
+          h.hangConnect = true
+        } else {
+          h.pendingPostConnect.push((handle) => {
+            handle.subject.next({
+              pattern: "stored.event.notify.0",
+              data: {
+                tenant: "test-tenant",
+                eventId: "event-1",
+                dataCoreId: "test-dc",
+                flowType: "test.0",
+                eventType: "test.created.0",
+                validTime: new Date().toISOString(),
+              },
+            })
+          })
+        }
+        handles.push(h)
+      },
+    })
+    factoryStub = stub(_internals, "createNotificationClient", factory)
+
+    const notifier = createNotifier(40)
+    const safety = setTimeout(() => {
+      const r = (notifier as unknown as { eventResolver?: () => void }).eventResolver
+      r?.()
+    }, 400)
+
+    // Cycle 1 — degraded: hung connect resolves via the ~40ms timeout.
+    const start1 = Date.now()
+    await notifier.wait()
+    const elapsed1 = Date.now() - start1
+
+    // Cycle 2 — recovered: connect succeeds, event delivered, resolves fast.
+    const start2 = Date.now()
+    await notifier.wait()
+    const elapsed2 = Date.now() - start2
+    clearTimeout(safety)
+
+    assert(elapsed1 >= 25 && elapsed1 < 200, `cycle 1 should re-poll at ~40ms, got ${elapsed1} ms`)
+    assert(elapsed2 < 100, `cycle 2 should resolve fast via WS event (back in WS mode), got ${elapsed2} ms`)
+    assertEquals(cycle, 2, "a fresh client is built each cycle")
+    assertEquals(handles.length, 2)
+    assertNotStrictEquals(handles[0].client, handles[1].client)
+    assertEquals(handles[0].disconnectCalls, 1, "degraded cycle still disconnects the dead client")
+    assertEquals(handles[1].disconnectCalls, 1)
   })
 
   it("demotes normal SDK notification lifecycle info logs to debug", async () => {

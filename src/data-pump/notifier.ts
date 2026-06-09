@@ -120,6 +120,16 @@ export class FlowcoreNotifier {
       },
     })
 
+    // Arm the timeout + abort listener BEFORE connect(). A reconnect whose
+    // connect() never resolves (half-open / black-holed socket) must not wedge
+    // the pump: the timer then resolves the wait at timeoutMs and the fetch loop
+    // re-polls (catching up any backlog) and attempts a fresh connect next cycle.
+    // The moment a connect() succeeds, that cycle waits on real WS events again —
+    // there is no sticky poll-mode state, so recovery to push mode is automatic.
+    clearTimeout(this.timer)
+    this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    signal?.addEventListener("abort", () => this.eventResolver?.())
+
     this.notificationClient = _internals.createNotificationClient(
       this.subject,
       this.webSocketAuth(),
@@ -134,13 +144,17 @@ export class FlowcoreNotifier {
       },
     )
 
+    const connectPromise = this.notificationClient.connect()
     try {
-      await this.notificationClient.connect()
-      clearTimeout(this.timer)
-      this.timer = setTimeout(() => this.eventResolver?.(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-      signal?.addEventListener("abort", () => this.eventResolver?.())
+      // Race connect() against the resolution promise so a hung connect can't
+      // block. A connect REJECTION still surfaces (preserving the main-loop
+      // self-heal that restarts on a thrown error).
+      await Promise.race([connectPromise, promise])
       await promise
     } finally {
+      // Swallow a late connect() rejection that may arrive after we already
+      // moved on via the timeout, so it never surfaces as an unhandledRejection.
+      connectPromise.catch(() => {})
       clearTimeout(this.timer)
       this.eventResolver = undefined
       this.notificationClient.disconnect()
