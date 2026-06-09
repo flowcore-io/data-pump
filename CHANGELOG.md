@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.4](https://github.com/flowcore-io/data-pump/compare/v0.21.3...v0.21.4) (2026-06-09)
+
+
+### Bug Fixes
+
+* **notifier:** arm timeout/abort before connect() to prevent hung-reconnect wedge ([#78](https://github.com/flowcore-io/data-pump/issues/78)) ([0fe4bbb](https://github.com/flowcore-io/data-pump/commit/0fe4bbbbda38ff58804403765832f41d2950a6df))
+
 ## [0.21.3](https://github.com/flowcore-io/data-pump/compare/v0.21.2...v0.21.3) (2026-06-02)
 
 
