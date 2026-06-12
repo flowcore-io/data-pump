@@ -1,4 +1,4 @@
-import type { Client as PgClient } from "npm:pg@^8.13.0"
+import type { Client as PgClient } from "pg"
 import type { FlowcoreDataPumpCoordinator } from "../../src/data-pump/types.ts"
 
 export class PostgresCoordinator implements FlowcoreDataPumpCoordinator {
@@ -15,7 +15,7 @@ export class PostgresCoordinator implements FlowcoreDataPumpCoordinator {
        RETURNING holder`,
       [key, instanceId, expiresAt],
     )
-    return result.rowCount > 0 && result.rows[0].holder === instanceId
+    return (result.rowCount ?? 0) > 0 && result.rows[0].holder === instanceId
   }
 
   async renewLease(instanceId: string, key: string, ttlMs: number): Promise<boolean> {

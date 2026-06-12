@@ -1,6 +1,4 @@
-import { assert, assertEquals, assertThrows } from "@std/assert"
-import { afterEach, beforeEach, describe, it } from "@std/testing/bdd"
-import { FakeTime } from "@std/testing/time"
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test"
 import type { EventListOutput, FlowcoreEvent } from "@flowcore/sdk"
 import { FlowcoreDataPump } from "../../src/data-pump/data-pump.ts"
 import { FlowcoreDataSource } from "../../src/data-pump/data-source.ts"
@@ -9,6 +7,30 @@ import type { FlowcoreDataPumpState, FlowcoreDataPumpStateManager } from "../../
 // #region Test Helpers
 
 const FAKE_API_KEY = "fc_testid_testsecret"
+
+function assert(condition: unknown, message?: string): asserts condition {
+  expect(Boolean(condition), message).toBe(true)
+}
+
+function assertEquals<T>(actual: T, expected: T, message?: string) {
+  expect(actual, message).toEqual(expected)
+}
+
+function assertThrows(fn: () => unknown, _errorClass?: typeof Error, message?: string) {
+  expect(fn).toThrow(message)
+}
+
+async function tickAsync(ms: number) {
+  await flushMicrotasks()
+  jest.advanceTimersByTime(ms)
+  await flushMicrotasks()
+}
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve()
+  }
+}
 
 function createMockStateManager(): FlowcoreDataPumpStateManager {
   return {
@@ -49,22 +71,20 @@ function createPump(
     },
     notifier: { type: "poller", intervalMs: 60_000 },
     logger,
-    baseUrlOverride: "http://localhost:99999",
+    baseUrlOverride: "http://localhost:9999",
     noTranslation: true,
   })
 }
 
 // #endregion
 
-describe("processLoop restart", { sanitizeOps: false, sanitizeResources: false }, () => {
-  let fakeTime: FakeTime
-
+describe("processLoop restart", () => {
   beforeEach(() => {
-    fakeTime = new FakeTime()
+    jest.useFakeTimers()
   })
 
   afterEach(() => {
-    fakeTime.restore()
+    jest.useRealTimers()
   })
 
   it("should not emit restart warnings after stop", async () => {
@@ -79,7 +99,7 @@ describe("processLoop restart", { sanitizeOps: false, sanitizeResources: false }
     pump.stop()
 
     // Advance past any potential restart delays
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
 
     const restartLogs = logs.filter((l) => l.level === "warn" && l.message.includes("Restarting process loop"))
     assertEquals(restartLogs.length, 0)
@@ -107,7 +127,7 @@ class FakeDataSource extends FlowcoreDataSource {
         flowType: "test.0",
         eventTypes: ["test.created.0"],
       },
-      baseUrlOverride: "http://localhost:99999",
+      baseUrlOverride: "http://localhost:9999",
       noTranslation: true,
     })
     this.timeBucketsValue = opts.timeBuckets ?? ["20260331120000", "20260331130000"]
@@ -125,12 +145,14 @@ class FakeDataSource extends FlowcoreDataSource {
     if (getBefore) {
       return Promise.resolve(
         this.timeBucketsValue.findLast((t) => Number.parseFloat(t) <= Number.parseFloat(timeBucket)) ??
-          this.timeBucketsValue[this.timeBucketsValue.length - 1] ?? null,
+          this.timeBucketsValue[this.timeBucketsValue.length - 1] ??
+          null,
       )
     }
     return Promise.resolve(
       this.timeBucketsValue.find((t) => Number.parseFloat(t) >= Number.parseFloat(timeBucket)) ??
-        this.timeBucketsValue[this.timeBucketsValue.length - 1] ?? null,
+        this.timeBucketsValue[this.timeBucketsValue.length - 1] ??
+        null,
     )
   }
 
@@ -169,7 +191,7 @@ function createPumpWithFakeDataSource(
       stateManager: stateManager ?? createMockStateManager(),
       notifier: { type: "poller", intervalMs: 60_000 },
       logger,
-      baseUrlOverride: "http://localhost:99999",
+      baseUrlOverride: "http://localhost:9999",
       noTranslation: true,
     },
     fakeDataSource,
@@ -178,15 +200,13 @@ function createPumpWithFakeDataSource(
 
 // #endregion
 
-describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: false }, () => {
-  let fakeTime: FakeTime
-
+describe("startMainLoop self-heal", () => {
   beforeEach(() => {
-    fakeTime = new FakeTime()
+    jest.useFakeTimers()
   })
 
   afterEach(() => {
-    fakeTime.restore()
+    jest.useRealTimers()
   })
 
   it("(a) loop throws once then self-restarts and resets attempts on next successful fetch", async () => {
@@ -210,11 +230,11 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     })
 
     // First call should have happened and thrown
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
     // Backoff: attempt 1 → 1s
-    await fakeTime.tickAsync(1_000)
+    await tickAsync(1_000)
     // Drain microtasks for the restarted loop to make a second call
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
 
     assert(fakeDataSource.getEventsCalls >= 2, `expected >=2 calls, got ${fakeDataSource.getEventsCalls}`)
     assertEquals(pump.isRunning, true)
@@ -228,7 +248,7 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     assert(restartLogs[0].message.includes("attempt 1"))
 
     pump.stop()
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
     // After graceful stop, callback fires without error
     assertEquals(callbackFired, true)
     assertEquals(callbackError, undefined)
@@ -244,42 +264,42 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     void pump.start(() => {})
 
     // First call (attempt 1 scheduled after 1s)
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 1)
 
     // 1s → 2nd call (attempt 1 scheduled, then attempt 2 after 2s)
-    await fakeTime.tickAsync(1_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(1_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 2)
 
     // 2s → 3rd call (4s next)
-    await fakeTime.tickAsync(2_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(2_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 3)
 
     // 4s → 4th call (8s next)
-    await fakeTime.tickAsync(4_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(4_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 4)
 
     // 8s → 5th call (16s next)
-    await fakeTime.tickAsync(8_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(8_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 5)
 
     // 16s → 6th call (30s capped next)
-    await fakeTime.tickAsync(16_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(16_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 6)
 
     // 30s → 7th call (30s capped next)
-    await fakeTime.tickAsync(30_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(30_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 7)
 
     // 30s → 8th call (cap held)
-    await fakeTime.tickAsync(30_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(30_000)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 8)
 
     // Verify exact backoff sequence was logged
@@ -292,7 +312,7 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     assertEquals(restartDelays.slice(0, 7), [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000])
 
     pump.stop()
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
   })
 
   it("(c) stop() during pending retry → no further retry fires", async () => {
@@ -305,14 +325,14 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     void pump.start(() => {})
 
     // First call fires → throws → schedules 1s retry
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
     assertEquals(fakeDataSource.getEventsCalls, 1)
 
     // Stop BEFORE the 1s retry fires
     pump.stop()
 
     // Advance past the retry window
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
 
     // No second call should have happened
     assertEquals(fakeDataSource.getEventsCalls, 1)
@@ -327,7 +347,7 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     const pump = createPumpWithFakeDataSource(fakeDataSource, logger)
 
     void pump.start(() => {})
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
 
     assertThrows(
       () => pump.restart({ timeBucket: "2026-05-12T13:13" } as FlowcoreDataPumpState),
@@ -339,7 +359,7 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     assertEquals(pump.isRunning, true)
 
     pump.stop()
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
   })
 
   it("(e) poisoned restartTo causes loop to log and exit cleanly", async () => {
@@ -369,7 +389,7 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     internals.abortController?.abort()
 
     // Let loop iterations + microtasks settle
-    await fakeTime.tickAsync(2_000)
+    await tickAsync(2_000)
 
     // Loop should have exited cleanly without throwing
     assertEquals(callbackFired, true)
@@ -390,21 +410,21 @@ describe("startMainLoop self-heal", { sanitizeOps: false, sanitizeResources: fal
     const pump = createPumpWithFakeDataSource(fakeDataSource, logger)
 
     void pump.start(() => {})
-    await fakeTime.tickAsync(0)
+    await tickAsync(0)
     assert(fakeDataSource.getEventsCalls >= 1)
 
     // Valid 14-digit timebucket — should not throw
     pump.restart({ timeBucket: "20260101000000" })
 
     // Loop processes the restart and continues pulling
-    await fakeTime.tickAsync(1_000)
-    await fakeTime.tickAsync(0)
+    await tickAsync(1_000)
+    await tickAsync(0)
 
     assert(pump.isRunning)
     assert(fakeDataSource.getEventsCalls >= 2)
 
     pump.stop()
-    await fakeTime.tickAsync(60_000)
+    await tickAsync(60_000)
   })
 })
 

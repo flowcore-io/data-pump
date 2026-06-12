@@ -30,11 +30,9 @@ export class NatsDistributionLeader {
 
     this.logger?.debug("Distributing events via NATS", { deliveryId, count: events.length, subject: this.subject })
 
-    const response = await this.connection.request(
-      this.subject,
-      this.codec.encode(request),
-      { timeout: this.timeoutMs },
-    )
+    const response = await this.connection.request(this.subject, this.codec.encode(request), {
+      timeout: this.timeoutMs,
+    })
 
     const reply = this.codec.decode(response.data) as NatsDistributionReply
     if (reply.status === "fail") {

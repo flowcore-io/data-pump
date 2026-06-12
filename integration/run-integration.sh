@@ -2,6 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+BIN_DIR="${DATA_PUMP_INTEGRATION_BIN_DIR:-${REPO_DIR}/.cache/bin}"
+mkdir -p "${BIN_DIR}"
+export DATA_PUMP_INTEGRATION_BIN_DIR="${BIN_DIR}"
+export PATH="${BIN_DIR}:${PATH}"
 
 echo "=========================================="
 echo "  Data Pump K8s Integration Test"

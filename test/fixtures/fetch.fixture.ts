@@ -1,6 +1,3 @@
-import { type Stub, stub } from "@std/testing/mock"
-import { assertArrayIncludes, assertObjectMatch } from "@std/assert"
-
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "OPTIONS" | "HEAD" | "TRACE" | "CONNECT"
 
 interface MockedRequest {
@@ -21,12 +18,11 @@ interface FetchMockerOptions {
 
 export class FetchMocker {
   private originalFetch: typeof globalThis.fetch
-  private fetchStub: Stub
   private mocks: Map<string, FetchMockBuilder> = new Map()
 
   constructor(private options: FetchMockerOptions = {}) {
     this.originalFetch = globalThis.fetch
-    this.fetchStub = stub(globalThis, "fetch", this.mockedFetch.bind(this))
+    globalThis.fetch = this.mockedFetch.bind(this) as typeof globalThis.fetch
   }
 
   public clear() {
@@ -51,7 +47,7 @@ export class FetchMocker {
   }
 
   public restore() {
-    this.fetchStub.restore()
+    globalThis.fetch = this.originalFetch
   }
 
   private mockedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -153,17 +149,13 @@ export class FetchMockBuilder {
       }
 
       if (mockedRequest.searchParams) {
-        try {
-          assertObjectMatch(mockedRequest.searchParams, searchParams)
-        } catch (_e) {
+        if (!objectIncludes(searchParams, mockedRequest.searchParams)) {
           return false
         }
       }
 
       if (mockedRequest.headers) {
-        try {
-          assertObjectMatch(mockedRequest.headers, headers)
-        } catch (_e) {
+        if (!objectIncludes(headers, mockedRequest.headers)) {
           console.log("headers mismatch", { expected: mockedRequest.headers, actual: headers })
           return false
         }
@@ -178,18 +170,14 @@ export class FetchMockBuilder {
           if (!Array.isArray(body)) {
             return false
           }
-          try {
-            assertArrayIncludes(mockedRequest.body, body)
-          } catch (_e) {
+          if (!mockedRequest.body.every((expected) => body.some((actual) => deepCompare(expected, actual)))) {
             return false
           }
         } else if (typeof mockedRequest.body === "object") {
           if (Array.isArray(body) || typeof body === "string") {
             return false
           }
-          try {
-            assertObjectMatch(mockedRequest.body, body)
-          } catch (_e) {
+          if (!objectIncludes(body, mockedRequest.body)) {
             return false
           }
         }
@@ -236,9 +224,7 @@ class FetchMockBuilderPath {
   }
 
   public matchHeaders(headers: Record<string, string>) {
-    this.headers = Object.fromEntries(
-      Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
-    )
+    this.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
     return this
   }
 
@@ -285,6 +271,10 @@ const urlParamsToObject = (urlParams: URLSearchParams) => {
     }
   }
   return obj
+}
+
+function objectIncludes(actual: Record<string, unknown>, expected: Record<string, unknown>): boolean {
+  return Object.entries(expected).every(([key, value]) => deepCompare(actual[key], value))
 }
 
 function deepCompare(a: unknown, b: unknown): boolean {

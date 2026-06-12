@@ -145,13 +145,15 @@ export class FlowcoreDataPump {
       options.auth.apiKeyId = parts[1]
     }
 
-    const dataSource = dataSourceOverride ?? new FlowcoreDataSource({
-      auth: options.auth,
-      dataSource: options.dataSource,
-      baseUrlOverride: options.baseUrlOverride,
-      noTranslation: options.noTranslation,
-      directMode: options.directMode,
-    })
+    const dataSource =
+      dataSourceOverride ??
+      new FlowcoreDataSource({
+        auth: options.auth,
+        dataSource: options.dataSource,
+        baseUrlOverride: options.baseUrlOverride,
+        noTranslation: options.noTranslation,
+        directMode: options.directMode,
+      })
     const notifier = new FlowcoreNotifier({
       auth: options.auth,
       dataSource: options.dataSource,
@@ -224,10 +226,11 @@ export class FlowcoreDataPump {
 
     if (this.options.stopAt) {
       this.stopAtState = {
-        timeBucket: (await this.dataSource.getClosestTimeBucket(
-          format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000"),
-          true,
-        )) ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
+        timeBucket:
+          (await this.dataSource.getClosestTimeBucket(
+            format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000"),
+            true,
+          )) ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
         eventId: TimeUuid.fromDate(this.options.stopAt).toString(),
       }
     }
@@ -316,9 +319,7 @@ export class FlowcoreDataPump {
         continue
       }
 
-      this.logger?.debug(
-        `fetching ${amountToFetch} events from ${this.bufferState.timeBucket}(${this.nextCursor})`,
-      )
+      this.logger?.debug(`fetching ${amountToFetch} events from ${this.bufferState.timeBucket}(${this.nextCursor})`)
 
       const { events, nextCursor } = await this.dataSource.getEvents(
         this.bufferState,
@@ -345,7 +346,9 @@ export class FlowcoreDataPump {
       this.bufferState.eventId = events[events.length - 1]?.eventId ?? this.bufferState.eventId
 
       if (
-        this.stopAtState?.timeBucket && this.bufferState.timeBucket >= this.stopAtState.timeBucket && !events.length
+        this.stopAtState?.timeBucket &&
+        this.bufferState.timeBucket >= this.stopAtState.timeBucket &&
+        !events.length
       ) {
         this.logger?.info("Stopping at stopAt state")
         await this.waitForBufferEmpty()
@@ -378,7 +381,8 @@ export class FlowcoreDataPump {
     if (this.restartTo) {
       try {
         await this.dataSource.getTimeBuckets(true)
-        this.restartTo.timeBucket = (await this.dataSource.getClosestTimeBucket(this.restartTo.timeBucket)) ??
+        this.restartTo.timeBucket =
+          (await this.dataSource.getClosestTimeBucket(this.restartTo.timeBucket)) ??
           format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
         this.nextCursor = undefined
         this.bufferState = this.restartTo

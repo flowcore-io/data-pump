@@ -117,9 +117,7 @@ export class PulseEmitter {
       },
       uptimeMs: snapshot.uptimeMs,
     }
-    await client.execute(
-      new SendPumpPulseCommand(input as ConstructorParameters<typeof SendPumpPulseCommand>[0]),
-    )
+    await client.execute(new SendPumpPulseCommand(input as ConstructorParameters<typeof SendPumpPulseCommand>[0]))
 
     this.logger?.[this.successLogLevel]?.("Pulse sent", {
       pathwayId: snapshot.pathwayId,

@@ -3,7 +3,6 @@
 A reliable, high-performance TypeScript client for streaming and processing events from the Flowcore platform. Built for
 real-time event processing with automatic retry, buffering, and state management.
 
-[![JSR](https://jsr.io/badges/@flowcore/data-pump)](https://jsr.io/@flowcore/data-pump)
 [![NPM Version](https://img.shields.io/npm/v/@flowcore/data-pump)](https://www.npmjs.com/package/@flowcore/data-pump)
 
 ## Simple Example Setup
@@ -29,7 +28,8 @@ const dataPump = FlowcoreDataPump.create({
     getState: () => null, // Start in live mode
     setState: (state) => console.log("Position:", state),
   },
-  processor: { // use this for automatic event lifecycle management
+  processor: {
+    // use this for automatic event lifecycle management
     handler: async (events) => {
       console.log(`Processing ${events.length} events`)
       // Your event processing logic here
@@ -70,7 +70,7 @@ Events are organized in **hourly time buckets** using the format `yyyyMMddHH0000
 
 ```
 20240315140000 = March 15, 2024, 14:00 (2 PM)
-20240315150000 = March 15, 2024, 15:00 (3 PM)  
+20240315150000 = March 15, 2024, 15:00 (3 PM)
 20240315160000 = March 15, 2024, 16:00 (4 PM)
 ```
 
@@ -125,7 +125,7 @@ Fetch → Buffer → YOU Reserve → YOU Process → YOU Acknowledge/Fail
 Local **in-memory event queue** between fetching and processing:
 
 ```typescript
-Buffer: [Event1, Event2, Event3, Event4, Event5] 
+Buffer: [Event1, Event2, Event3, Event4, Event5]
          ↑                              ↑
     Processing these              Fetching more
 ```
@@ -201,9 +201,15 @@ Event fails → Retry 1 → Retry 2 → Retry 3 → Permanent failure
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
-  auth: {/* auth config */},
-  dataSource: {/* data source config */},
-  stateManager: {/* state management */},
+  auth: {
+    /* auth config */
+  },
+  dataSource: {
+    /* data source config */
+  },
+  stateManager: {
+    /* state management */
+  },
   processor: {
     concurrency: 5,
     handler: async (events) => {
@@ -236,9 +242,15 @@ await dataPump.start() // Just start and it runs automatically!
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
-  auth: {/* auth config */},
-  dataSource: {/* data source config */},
-  stateManager: {/* state management */},
+  auth: {
+    /* auth config */
+  },
+  dataSource: {
+    /* data source config */
+  },
+  stateManager: {
+    /* state management */
+  },
   // ❌ No processor = manual mode
 })
 
@@ -256,9 +268,7 @@ while (dataPump.isRunning) {
     }
 
     // 2️⃣ YOU handle business logic with custom error handling
-    const results = await Promise.allSettled(
-      events.map((event) => processEvent(event)),
-    )
+    const results = await Promise.allSettled(events.map((event) => processEvent(event)))
 
     // 3️⃣ YOU decide what succeeded vs failed
     const successfulIds = []
@@ -325,8 +335,8 @@ const oidc = oidcClient({
 })
 
 auth: {
-  getBearerToken: ;
-  ;(() => oidc.getToken().then((token) => token.accessToken))
+  getBearerToken:;
+  ;() => oidc.getToken().then((token) => token.accessToken)
 }
 ```
 
@@ -399,14 +409,14 @@ const timestamp = date.getTime() // Unix timestamp
 let currentState = null; // Start in live mode
 
 // Or start from specific time:
-// let currentState = { 
+// let currentState = {
 //   timeBucket: "20240101000000",  // January 1, 2024 00:00
 //   eventId: undefined             // Start from first event in that hour
 // };
 
 stateManager: {
   getState: () => currentState,
-  setState: (state) => { 
+  setState: (state) => {
     currentState = state;
     console.log(`Processed up to: ${state.timeBucket} - ${state.eventId}`);
   }
@@ -481,22 +491,22 @@ stateManager: {
   getState: async () => {
     try {
       const result = await db.query(
-        'SELECT time_bucket, event_id FROM flowcore_pump_state WHERE id = ?', 
+        'SELECT time_bucket, event_id FROM flowcore_pump_state WHERE id = ?',
         ['main']
       );
-      
+
       if (result.length === 0) {
         console.log('No previous state found, starting in live mode');
         return null;
       }
-      
+
       const state = {
         timeBucket: result[0].time_bucket,
         eventId: result[0].event_id
       };
       console.log('Resuming from database state:', state);
       return state;
-      
+
     } catch (error) {
       console.error('Failed to load state from database:', error);
       // Critical decision: start fresh or fail fast?
@@ -504,18 +514,18 @@ stateManager: {
       // throw error; // Or fail fast if state is critical
     }
   },
-  
+
   setState: async (state) => {
     try {
       await db.query(`
         INSERT INTO flowcore_pump_state (id, time_bucket, event_id, updated_at)
         VALUES (?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE 
+        ON DUPLICATE KEY UPDATE
           time_bucket = VALUES(time_bucket),
           event_id = VALUES(event_id),
           updated_at = NOW()
       `, ['main', state.timeBucket, state.eventId]);
-      
+
     } catch (error) {
       console.error('CRITICAL: Failed to save state to database:', error);
       throw error; // Stop processing if we can't save progress
@@ -612,9 +622,9 @@ notifier: {
 For distributed systems with message queues:
 
 ```typescript
-notifier: { 
-  type: "nats", 
-  servers: ["nats://localhost:4222", "nats://backup:4222"] 
+notifier: {
+  type: "nats",
+  servers: ["nats://localhost:4222", "nats://backup:4222"]
 }
 ```
 
@@ -623,8 +633,8 @@ notifier: {
 Simple polling mechanism:
 
 ```typescript
-notifier: { 
-  type: "poller", 
+notifier: {
+  type: "poller",
   intervalMs: 5000 // Poll every 5 seconds
 }
 ```

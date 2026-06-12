@@ -1,8 +1,11 @@
 tmp/
 .env
 .DS_Store
+.cache/
 src/local/
 npm/
+node_modules/
+dist/
 coverage/
 
 src/test/

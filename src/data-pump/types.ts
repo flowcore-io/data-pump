@@ -2,16 +2,16 @@ import type { FlowcoreEvent } from "@flowcore/sdk"
 
 export type FlowcoreDataPumpAuth =
   | {
-    apiKey: string
-    /**
-     * The ID of the API key.
-     * @deprecated Use apiKey only instead (apiKeyId is only used for old api keys).
-     */
-    apiKeyId?: string
-  }
+      apiKey: string
+      /**
+       * The ID of the API key.
+       * @deprecated Use apiKey only instead (apiKeyId is only used for old api keys).
+       */
+      apiKeyId?: string
+    }
   | {
-    getBearerToken: () => Promise<string>
-  }
+      getBearerToken: () => Promise<string>
+    }
 
 export interface FlowcoreDataPumpState {
   timeBucket: string
