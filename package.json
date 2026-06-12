@@ -1,7 +1,7 @@
 {
   "name": "@flowcore/data-pump",
   "description": "Flowcore Data Pump",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "license": "MIT",
   "type": "module",
   "exports": {
