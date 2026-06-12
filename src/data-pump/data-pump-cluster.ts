@@ -96,7 +96,8 @@ export class FlowcoreDataPumpCluster {
   }
 
   private get natsDistributionSubject(): string {
-    const key = this.options.clusterKey ??
+    const key =
+      this.options.clusterKey ??
       `${this.options.dataSource.tenant}.${this.options.dataSource.dataCore}.${this.options.dataSource.flowType}`
     return `data-pump.distribute.${key}`
   }
@@ -121,15 +122,20 @@ export class FlowcoreDataPumpCluster {
    * Handle an incoming WebSocket connection from a peer.
    * Call this from your HTTP server's WebSocket upgrade handler.
    *
-   * Example (Deno):
+   * Example (Bun):
    * ```typescript
-   * Deno.serve({ port: 8080 }, (req) => {
-   *   if (req.headers.get("upgrade") === "websocket") {
-   *     const { socket, response } = Deno.upgradeWebSocket(req)
-   *     cluster.handleConnection(socket)
-   *     return response
-   *   }
-   *   return new Response("Not found", { status: 404 })
+   * Bun.serve({
+   *   port: 8080,
+   *   fetch(req, server) {
+   *     if (server.upgrade(req)) return undefined
+   *     return new Response("Not found", { status: 404 })
+   *   },
+   *   websocket: {
+   *     open(socket) {
+   *       cluster.handleConnection(socket as unknown as WebSocket)
+   *     },
+   *     message() {},
+   *   },
    * })
    * ```
    *
@@ -315,11 +321,7 @@ export class FlowcoreDataPumpCluster {
     if (this.useNatsDistribution) {
       // NATS mode: create leader distributor, no WS discovery needed
       const conn = await this.natsConnectionManager!.connect()
-      this.natsDistLeader = new NatsDistributionLeader(
-        conn,
-        this.natsDistributionSubject,
-        this.logger,
-      )
+      this.natsDistLeader = new NatsDistributionLeader(conn, this.natsDistributionSubject, this.logger)
     } else {
       // WS mode: start worker discovery
       this.startWorkerDiscovery()

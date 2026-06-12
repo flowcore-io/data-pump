@@ -25,8 +25,7 @@ export class FlowcoreNotifier {
   private subject?: Subject<NotificationEvent>
   private notificationClient?: NotificationClient
   private eventResolver?: () => void
-  // deno-lint-ignore no-explicit-any
-  private timer?: any
+  private timer?: ReturnType<typeof setTimeout>
 
   constructor(private readonly options: FlowcoreNotifierOptions) {
     this.dataSource = new FlowcoreDataSource({
@@ -205,7 +204,6 @@ function isNormalNotificationLifecycleInfo(message: string): boolean {
  * property with a fake factory to drive the subject manually. Not part of the
  * public API.
  */
-// deno-lint-ignore no-explicit-any
 type NotificationClientFactory = (...args: any[]) => NotificationClient
 export const _internals: { createNotificationClient: NotificationClientFactory } = {
   createNotificationClient: (...args) =>

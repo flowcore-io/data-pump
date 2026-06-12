@@ -1,8 +1,7 @@
-import { assertEquals } from "@std/assert/equals"
-import { describe, it } from "@std/testing/bdd"
+import { describe, expect, it } from "bun:test"
 
 describe("Example", () => {
   it("should be successful", () => {
-    assertEquals(true, true)
+    expect(true).toEqual(true)
   })
 })

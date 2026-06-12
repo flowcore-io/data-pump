@@ -10,13 +10,14 @@ class FlowcoreClientWithMetrics extends FlowcoreClient {
 }
 
 export function getFlowcoreClient(auth: FlowcoreDataPumpAuth, baseUrlOverride?: string) {
-  const client = "apiKey" in auth
-    ? new FlowcoreClientWithMetrics({
-      apiKey: auth.apiKey,
-      // apiKeyId is guaranteed to be set — FlowcoreDataPump.create() parses it from fc_ keys
-      apiKeyId: auth.apiKeyId!,
-    })
-    : new FlowcoreClientWithMetrics(auth)
+  const client =
+    "apiKey" in auth
+      ? new FlowcoreClientWithMetrics({
+          apiKey: auth.apiKey,
+          // apiKeyId is guaranteed to be set — FlowcoreDataPump.create() parses it from fc_ keys
+          apiKeyId: auth.apiKeyId!,
+        })
+      : new FlowcoreClientWithMetrics(auth)
 
   if (baseUrlOverride) {
     client.setBaseUrl(baseUrlOverride)

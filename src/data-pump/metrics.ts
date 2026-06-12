@@ -1,7 +1,7 @@
 import PromClient, { Counter, Gauge } from "prom-client"
 
-export const dataPumpPromRegistry: PromClient.Registry<"text/plain; version=0.0.4; charset=utf-8"> = new PromClient
-  .Registry()
+export const dataPumpPromRegistry: PromClient.Registry<"text/plain; version=0.0.4; charset=utf-8"> =
+  new PromClient.Registry()
 
 const bufferEventCountGauge: Gauge<"tenant" | "data_core" | "flow_type" | "event_type"> = new Gauge({
   name: "flowcore_data_pump_buffer_events_gauge",

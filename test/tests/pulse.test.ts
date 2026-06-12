@@ -1,5 +1,4 @@
-import { assertEquals } from "@std/assert/equals"
-import { describe, it } from "@std/testing/bdd"
+import { describe, expect, it } from "bun:test"
 import { PulseEmitter, type PulseSnapshot } from "../../src/data-pump/pulse.ts"
 
 // The PulseEmitter posts via a Flowcore SDK Command, which routes through
@@ -23,7 +22,7 @@ describe("PulseEmitter snapshot shape", () => {
       pulledTotal: 0,
       uptimeMs: 0,
     }
-    assertEquals(snapshot.sourceId, "source-1")
+    expect(snapshot.sourceId).toEqual("source-1")
   })
 
   it("PulseSnapshot.sourceId is optional for back-compat", () => {
@@ -41,7 +40,7 @@ describe("PulseEmitter snapshot shape", () => {
       pulledTotal: 0,
       uptimeMs: 0,
     }
-    assertEquals(snapshot.sourceId, undefined)
+    expect(snapshot.sourceId).toEqual(undefined)
   })
 
   it("emitter accepts sourceId in options (compile-time check)", () => {
@@ -55,7 +54,7 @@ describe("PulseEmitter snapshot shape", () => {
       },
       () => null,
     )
-    assertEquals(typeof emitter.start, "function")
-    assertEquals(typeof emitter.stop, "function")
+    expect(typeof emitter.start).toEqual("function")
+    expect(typeof emitter.stop).toEqual("function")
   })
 })

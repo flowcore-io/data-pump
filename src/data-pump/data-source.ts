@@ -248,12 +248,12 @@ export class FlowcoreDataSource {
     if (getBefore) {
       return (
         timeBuckets.findLast((t) => Number.parseFloat(t) <= Number.parseFloat(timeBucket)) ??
-          timeBuckets[timeBuckets.length - 1]
+        timeBuckets[timeBuckets.length - 1]
       )
     }
     return (
       timeBuckets.find((t) => Number.parseFloat(t) >= Number.parseFloat(timeBucket)) ??
-        timeBuckets[timeBuckets.length - 1]
+      timeBuckets[timeBuckets.length - 1]
     )
   }
 

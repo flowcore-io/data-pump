@@ -34,9 +34,11 @@ export class FakeDataSource extends FlowcoreDataSource {
       this.events.push({
         eventId: timeUuid.toString(),
         eventType: "test-event",
-        aggregator: `agg-${i}`,
+        tenant: "integration-test",
+        dataCoreId: "test-data-core",
+        flowType: "test-flow-type",
         payload: { index: i, data: `test-payload-${i}` },
-        metadata: {},
+        metadata: { aggregator: `agg-${i}` },
         timeBucket: this.timeBucket,
         validTime: new Date().toISOString(),
       })

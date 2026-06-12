@@ -5,7 +5,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "deno.json",
+          "path": "package.json",
           "jsonpath": "$.version"
         }
       ]

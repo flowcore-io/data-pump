@@ -1,8 +1,8 @@
-FROM denoland/deno:latest
+FROM oven/bun:1
 WORKDIR /app
-COPY deno.json deno.lock ./
+COPY package.json bun.lock ./
 COPY src/ ./src/
 COPY integration/app/ ./integration/app/
-RUN deno install
+RUN bun install --frozen-lockfile
 EXPOSE 8080
-CMD ["deno", "run", "-A", "integration/app/main.ts"]
+CMD ["bun", "run", "integration/app/main.ts"]

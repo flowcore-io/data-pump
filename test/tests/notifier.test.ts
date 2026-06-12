@@ -1,6 +1,4 @@
-import { assert, assertEquals, assertNotStrictEquals, assertStrictEquals } from "@std/assert"
-import { afterEach, describe, it } from "@std/testing/bdd"
-import { stub } from "@std/testing/mock"
+import { afterEach, describe, expect, it } from "bun:test"
 import type { NotificationClient, NotificationEvent } from "@flowcore/sdk"
 import type { Subject } from "rxjs"
 import { _internals, FlowcoreNotifier } from "../../src/data-pump/notifier.ts"
@@ -9,6 +7,32 @@ import type { FlowcoreLogger } from "../../src/data-pump/types.ts"
 // #region Test Helpers
 
 const FAKE_API_KEY = "fc_testid_testsecret"
+
+function assert(condition: unknown, message?: string): asserts condition {
+  expect(Boolean(condition), message).toBe(true)
+}
+
+function assertEquals<T>(actual: T, expected: T, message?: string) {
+  expect(actual, message).toEqual(expected)
+}
+
+function assertNotStrictEquals<T>(actual: T, expected: T, message?: string) {
+  expect(actual, message).not.toBe(expected)
+}
+
+function assertStrictEquals<T>(actual: T, expected: T, message?: string) {
+  expect(actual, message).toBe(expected)
+}
+
+function stubProperty<T extends object, K extends keyof T>(target: T, key: K, value: T[K]) {
+  const original = target[key]
+  target[key] = value
+  return {
+    restore() {
+      target[key] = original
+    },
+  }
+}
 
 interface FakeClientHandle {
   client: NotificationClient
@@ -120,8 +144,7 @@ function createNotifier(timeoutMs?: number, logger?: FlowcoreLogger): FlowcoreNo
 // #endregion
 
 describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
-  // deno-lint-ignore no-explicit-any
-  let factoryStub: any
+  let factoryStub: { restore: () => void } | undefined
 
   afterEach(() => {
     factoryStub?.restore()
@@ -138,7 +161,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         handles.push(h)
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     // Safety: if the bug is present, wait() will hang 20 s. We assert resolution
@@ -171,7 +194,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         h.pendingPostConnect.push((handle) => handle.subject.error(new Error("close")))
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     await notifier.wait()
@@ -216,7 +239,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         }
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     await notifier.wait() // cycle 1 — WS error path
@@ -234,7 +257,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
     const { factory } = createFakeFactory({
       onCreate: (h) => handles.push(h),
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(30)
 
@@ -252,7 +275,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
     const { factory } = createFakeFactory({
       onCreate: (h) => handles.push(h),
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     const controller = new AbortController()
@@ -277,7 +300,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
           h.pendingPostConnect.push((handle) => handle.subject.error(new Error("ws down")))
         },
       })
-      const s = stub(_internals, "createNotificationClient", factory)
+      const s = stubProperty(_internals, "createNotificationClient", factory)
       const start = Date.now()
       try {
         const notifier = createNotifier(20_000)
@@ -295,7 +318,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
       const { factory } = createFakeFactory({
         onCreate: (h) => handles.push(h),
       })
-      const s = stub(_internals, "createNotificationClient", factory)
+      const s = stubProperty(_internals, "createNotificationClient", factory)
       try {
         const notifier = createNotifier(20)
         await notifier.wait()
@@ -325,7 +348,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
           })
         },
       })
-      const s = stub(_internals, "createNotificationClient", factory)
+      const s = stubProperty(_internals, "createNotificationClient", factory)
       try {
         const notifier = createNotifier(20_000)
         await notifier.wait()
@@ -340,7 +363,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
       const { factory } = createFakeFactory({
         onCreate: (h) => handles.push(h),
       })
-      const s = stub(_internals, "createNotificationClient", factory)
+      const s = stubProperty(_internals, "createNotificationClient", factory)
       try {
         const notifier = createNotifier(20_000)
         const controller = new AbortController()
@@ -382,7 +405,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         })
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     // Wrap the eventResolver to count how many times it would have fired.
@@ -434,7 +457,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         h.connectError = new Error("connect failed")
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000)
     const start = Date.now()
@@ -471,7 +494,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         handles.push(h)
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(30)
     // Safety: if the bug is present, wait() hangs. Force-resolve at 250ms so the
@@ -521,7 +544,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         handles.push(h)
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(40)
     const safety = setTimeout(() => {
@@ -562,7 +585,7 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
         })
       },
     })
-    factoryStub = stub(_internals, "createNotificationClient", factory)
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
 
     const notifier = createNotifier(20_000, logger)
     await notifier.wait()

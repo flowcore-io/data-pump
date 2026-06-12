@@ -1,0 +1,5 @@
+node_modules
+dist
+CHANGELOG.md
+handoff.md
+bun.lock

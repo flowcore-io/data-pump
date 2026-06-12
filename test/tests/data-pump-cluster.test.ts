@@ -1,5 +1,4 @@
-import { assertEquals, assertRejects, assertThrows } from "@std/assert"
-import { beforeEach, describe, it } from "@std/testing/bdd"
+import { beforeEach, describe, expect, it } from "bun:test"
 import type { FlowcoreEvent } from "@flowcore/sdk"
 import { FlowcoreDataPumpCluster } from "../../src/data-pump/data-pump-cluster.ts"
 import type { FlowcoreDataPumpCoordinator, FlowcoreLogger } from "../../src/data-pump/types.ts"
@@ -12,6 +11,18 @@ import {
   type WsPingMessage,
 } from "../../src/data-pump/ws-protocol.ts"
 import type { NatsDistributionReply, NatsDistributionRequest } from "../../src/data-pump/nats-distribution.ts"
+
+function assertEquals<T>(actual: T, expected: T, message?: string) {
+  expect(actual, message).toEqual(expected)
+}
+
+function assertThrows(fn: () => unknown, _errorClass?: typeof Error, message?: string) {
+  expect(fn).toThrow(message)
+}
+
+async function assertRejects(fn: () => Promise<unknown>, _errorClass?: typeof Error, message?: string) {
+  await expect(fn()).rejects.toThrow(message)
+}
 
 // #region Mock Coordinator
 
