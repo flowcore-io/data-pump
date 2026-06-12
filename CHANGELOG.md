@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.0](https://github.com/flowcore-io/data-pump/compare/v0.21.4...v0.22.0) (2026-06-12)
+
+
+### Features
+
+* migrate project to bun ([#80](https://github.com/flowcore-io/data-pump/issues/80)) ([073812d](https://github.com/flowcore-io/data-pump/commit/073812d22b7aa85a28c9a354a9cbccb5117d8684))
+
+
+### Bug Fixes
+
+* ignore release-please manifest formatting ([#82](https://github.com/flowcore-io/data-pump/issues/82)) ([3e6cfd0](https://github.com/flowcore-io/data-pump/commit/3e6cfd04875522352320c45d4f642db07dba0938))
+
 ## [0.21.4](https://github.com/flowcore-io/data-pump/compare/v0.21.3...v0.21.4) (2026-06-09)
 
 
