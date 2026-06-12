@@ -3,3 +3,4 @@ dist
 CHANGELOG.md
 handoff.md
 bun.lock
+.github/workflows/.release-please-manifest.json
