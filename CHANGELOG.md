@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/flowcore-io/data-pump/compare/v0.22.0...v0.22.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* use trusted publishing for npm release ([#83](https://github.com/flowcore-io/data-pump/issues/83)) ([cd517d2](https://github.com/flowcore-io/data-pump/commit/cd517d2923798615d232d5b9262e8a981fa2d5f2))
+
 ## [0.22.0](https://github.com/flowcore-io/data-pump/compare/v0.21.4...v0.22.0) (2026-06-12)
 
 
