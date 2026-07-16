@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.2](https://github.com/flowcore-io/data-pump/compare/v0.22.1...v0.22.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* prettier-errors ([952d5ea](https://github.com/flowcore-io/data-pump/commit/952d5eaa822328dbcd25c76f05678da00cc4da6e))
+* readme file not containing features ([af40911](https://github.com/flowcore-io/data-pump/commit/af40911bbbf8b9845af9844b8efb91faac96bb90))
+
 ## [0.22.1](https://github.com/flowcore-io/data-pump/compare/v0.22.0...v0.22.1) (2026-06-12)
 
 
