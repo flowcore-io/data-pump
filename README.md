@@ -11,34 +11,30 @@ real-time event processing with automatic retry, buffering, and state management
 import { FlowcoreDataPump } from "@flowcore/data-pump"
 
 const dataPump = FlowcoreDataPump.create({
-  // make sure that api key has sufficient IAM permissions to access streaming operations (COLLABORATOR is an example of a role that has sufficient permissions)
-  // there are two ways to authenticate. API key and OIDC/Bearer token.
+  // The identity must have permission to list buckets and read events.
   auth: {
-    apiKey: "your-api-key",
-    apiKeyId: "your-api-key-id",
+    apiKey: process.env.FLOWCORE_API_KEY!,
   },
   dataSource: {
-    tenant: "your-tenant-name", // this should always be the tenant name, not the tenant id
-    dataCore: "your-data-core", // if noTranslation is false, this should be the data core name, not the id
-    flowType: "your-flow-type", // if noTranslation is false, this should be the flow type name, not the id
-    eventTypes: ["event-type-1", "event-type-2", "event-type-3"], // if noTranslation is false, this should be the event type names, not the ids
+    tenant: "your-tenant-name",
+    dataCore: "your-data-core",
+    flowType: "your-flow-type",
+    eventTypes: ["event-type-1", "event-type-2"],
   },
-  noTranslation: false, // if true (the data core, flow types, and event types) names will not be translated to ids. Use this for performance reasons.
   stateManager: {
-    getState: () => null, // Start in live mode
-    setState: (state) => console.log("Position:", state),
+    getState: () => loadState(),
+    setState: (state) => saveState(state),
   },
   processor: {
-    // use this for automatic event lifecycle management
+    concurrency: 10, // Batch size passed to one handler invocation
     handler: async (events) => {
-      console.log(`Processing ${events.length} events`)
-      // Your event processing logic here
+      for (const event of events) {
+        await processIdempotently(event)
+      }
     },
   },
   notifier: { type: "websocket" },
-
-  directMode: false, // To interact with the Flowcore API more directly. This is a dedicated cluster feature.
-  bufferSize: 100,
+  bufferSize: 500,
   logger: {
     debug: (msg) => console.log(`[DEBUG] ${msg}`),
     info: (msg) => console.log(`[INFO] ${msg}`),
@@ -47,7 +43,10 @@ const dataPump = FlowcoreDataPump.create({
   },
 })
 
-await dataPump.start()
+// The callback form runs in the background and enables fetch-loop self-healing.
+await dataPump.start((error) => {
+  if (error) console.error("Data Pump stopped with an error", error)
+})
 ```
 
 ## Installation
@@ -83,22 +82,19 @@ Events are organized in **hourly time buckets** using the format `yyyyMMddHH0000
 
 ### **State Management**
 
-The pump **tracks its exact position** using time buckets + event IDs:
+The pump persists a conservative processing frontier using a time bucket and event ID:
 
 ```typescript
 // Current position in event stream
 {
-  timeBucket: "20240315140000",           // Currently processing 2 PM hour
-  eventId: "abc-123-def-456"              // Last successfully processed event
+  timeBucket: "20240315140000",
+  eventId: "abc-123-def-456"
 }
 ```
 
-**Critical capabilities:**
-
-- **Crash recovery**: Restart exactly where you left off (no duplicate processing)
-- **Horizontal scaling**: Multiple instances can coordinate using shared database state
-- **Historical processing**: Start from any point in time (hours, days, months ago)
-- **Deployment safety**: Updates don't lose processing progress
+The fetch position can run ahead of this persisted frontier. When events remain buffered, the saved event ID is based on
+the earliest remaining event rather than simply the last handler to finish. After a crash, the pump may therefore replay
+events. Consumers must use `eventId` as a durable idempotency key.
 
 ### **Event Lifecycle & Processing Modes**
 
@@ -144,8 +140,11 @@ Two fundamental processing patterns:
 #### **Live Mode**
 
 - **When**: `stateManager.getState()` returns `null`
-- **Behavior**: Process new events as they arrive (real-time)
+- **Behavior**: Start in the current hour after a time-based event ID representing now, then process newly stored events
 - **Use case**: Production event processing, real-time analytics
+
+Returning `null` does not replay events from earlier in the current hour. Supply an explicit state for a backfill or when
+creating a projection from retained history.
 
 #### **Historical Mode**
 
@@ -153,41 +152,39 @@ Two fundamental processing patterns:
 - **Behavior**: Process events from specific point in time
 - **Use case**: Backfill data, debugging, data migration, replaying scenarios
 
-### **⚡ Concurrency & Parallel Processing**
+### **Batch Size and Application Concurrency**
 
-Control how many events process simultaneously:
+In version 0.22.x, `processor.concurrency` controls how many events are reserved and passed to one handler invocation. It
+does not start that many handler invocations in parallel:
 
 ```typescript
 processor: {
-  concurrency: 5,  // Process up to 5 events in parallel
+  concurrency: 5,
   handler: async (events) => {
-    // This batch could contain 1-5 events
-    // All processed in parallel for efficiency
+    // This batch contains up to five events.
+    // Add parallelism here only when ordering and dependencies allow it.
+    await Promise.all(events.map(processIdempotently))
   }
 }
 ```
 
-**Performance considerations:**
+The batch is acknowledged only after the complete handler resolves. If some events commit before a later event throws,
+the whole batch can be delivered again.
 
-- **Higher concurrency**: Faster processing, more resource usage
-- **Lower concurrency**: More controlled, better for external API limits
-- **Optimal range**: Usually 5-20 for most applications
+### **Failure Handling and Retries**
 
-### **🔧 Failure Handling & Retries**
-
-Automatic resilience for production systems:
+Handler retries are driven by the acknowledgment timeout:
 
 ```
-Event fails → Retry 1 → Retry 2 → Retry 3 → Permanent failure
-     ↓           ↓         ↓         ↓            ↓
- Log error   Log retry  Log retry  Log retry   failedHandler()
+Reserve → Handler throws → Reservation times out → Reopen → Reserve again
 ```
 
-**Configurable behavior:**
+`achknowledgeTimeoutMs` is a fixed delay; per-event redelivery does not use exponential backoff. With the default
+`maxRedeliveryCount: 3`, an event can be reserved four times: the initial delivery plus three redeliveries. Set the value
+to `-1` only when unlimited redelivery is intentional.
 
-- `maxRedeliveryCount`: How many retries before giving up
-- `failedHandler`: Your code to handle permanently failed events
-- **Exponential backoff**: Automatic delays between retries
+Exponential backoff from one to thirty seconds is used for failed fetch loops, process loops, leader pumps, and cluster
+reconnections.
 
 ## Usage Patterns
 
@@ -213,12 +210,11 @@ const dataPump = FlowcoreDataPump.create({
   processor: {
     concurrency: 5,
     handler: async (events) => {
-      // You only write business logic here
       for (const event of events) {
-        await processEvent(event)
+        await processIdempotently(event)
       }
-      // ✅ Pump automatically acknowledges if successful
-      // ❌ Pump automatically retries if errors thrown
+      // The complete batch is acknowledged after this handler resolves.
+      // If it throws, the reservation reopens after achknowledgeTimeoutMs.
     },
     failedHandler: async (failedEvents) => {
       // Handle events that permanently failed after all retries
@@ -229,14 +225,16 @@ const dataPump = FlowcoreDataPump.create({
   maxRedeliveryCount: 3,
 })
 
-await dataPump.start() // Just start and it runs automatically!
+await dataPump.start((error) => {
+  if (error) console.error("Data Pump stopped", error)
+})
 ```
 
 ### Pull Mode (Manual Lifecycle Control)
 
-**For advanced scenarios** - You control the entire event lifecycle manually.
+**For advanced scenarios** - You control reservation and acknowledgment manually.
 
-- **You handle**: Reserve → Process → Acknowledge/Fail → Custom retry logic
+- **You handle**: Reserve → Process → Acknowledge, leave reserved for retry, or fail terminally
 - **Pump provides**: Raw event access and buffer management
 - **Use when**: Complex error handling, partial batch failures, or custom acknowledgment logic
 
@@ -254,49 +252,28 @@ const dataPump = FlowcoreDataPump.create({
   // ❌ No processor = manual mode
 })
 
-await dataPump.start()
+await dataPump.start((error) => {
+  if (error) console.error("Data Pump stopped", error)
+})
 
 // You manually control the entire event lifecycle
 while (dataPump.isRunning) {
-  try {
-    // 1️⃣ YOU manually reserve events from buffer
-    const events = await dataPump.reserve(10)
+  const events = await dataPump.reserve(10)
 
-    if (events.length === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      continue
+  for (const event of events) {
+    try {
+      await processIdempotently(event)
+      await dataPump.acknowledge([event.eventId])
+    } catch (error) {
+      console.warn("Leaving event reserved for timeout-based redelivery", event.eventId, error)
     }
-
-    // 2️⃣ YOU handle business logic with custom error handling
-    const results = await Promise.allSettled(events.map((event) => processEvent(event)))
-
-    // 3️⃣ YOU decide what succeeded vs failed
-    const successfulIds = []
-    const failedIds = []
-
-    results.forEach((result, index) => {
-      const eventId = events[index].eventId
-      if (result.status === "fulfilled") {
-        successfulIds.push(eventId)
-      } else {
-        failedIds.push(eventId)
-      }
-    })
-
-    // 4️⃣ YOU manually acknowledge successful events (removes from buffer)
-    if (successfulIds.length > 0) {
-      await dataPump.acknowledge(successfulIds)
-    }
-
-    // 5️⃣ YOU manually mark failed events for retry
-    if (failedIds.length > 0) {
-      await dataPump.fail(failedIds)
-    }
-  } catch (error) {
-    console.error("Processing error:", error)
   }
 }
 ```
+
+`fail(eventIds)` is terminal: it removes matching events from the buffer and invokes `failedHandler` when configured. It
+does **not** schedule a retry. Leave a reservation unresolved to make it eligible for redelivery after the acknowledgment
+timeout.
 
 ### Which Mode Should You Use?
 
@@ -316,18 +293,17 @@ while (dataPump.isRunning) {
 
 ```typescript
 auth: {
-  apiKey: "your-api-key",
-  apiKeyId: "your-api-key-id"
+  apiKey: process.env.FLOWCORE_API_KEY!
 }
 ```
 
-> **💡 Important:** Make sure your API key has sufficient IAM permissions. The key should have **COLLABORATOR** role or
-> other IAM permissions that have access to streaming operations.
+Current `fc_{id}_{secret}` keys contain their key ID. `apiKeyId` remains available for old keys but is deprecated. The
+identity needs IAM permission to list time buckets and read events for the selected resources.
 
 ### OIDC/Bearer Token Authentication
 
 ```typescript
-import { oidcClient } from "@flowcore/oidc-client"
+import { oidcClient } from "@flowcore/sdk-oidc-client"
 
 const oidc = oidcClient({
   clientId: "your-client-id",
@@ -335,15 +311,14 @@ const oidc = oidcClient({
 })
 
 auth: {
-  getBearerToken:;
-  ;() => oidc.getToken().then((token) => token.accessToken)
+  getBearerToken: () => oidc.getToken().then((token) => token.accessToken)
 }
 ```
 
 ## State Management
 
-The state manager tracks your processing position so you can resume exactly where you left off after restarts, crashes,
-or deployments. It prevents duplicate processing and ensures no events are lost.
+The state manager stores a conservative processing frontier. It supports recovery, but it does not provide exactly-once
+processing. A crash between a business side effect and acknowledgment can cause replay, so handlers must be idempotent.
 
 ### Understanding State
 
@@ -360,7 +335,7 @@ interface FlowcoreDataPumpState {
 
 **Return Values:**
 
-- `null` → Start in **live mode** (process new events only)
+- `null` → Start in the current hour after an event ID representing the current time
 - `{ timeBucket, eventId }` → Start from **specific position** (historical processing)
 
 ### Precise Positioning with TimeUuid
@@ -375,16 +350,13 @@ const eventId = TimeUuid.fromDate(new Date("2024-01-01T12:30:00Z")).toString()
 
 // Start processing from timestamp (doesn't need to match existing event)
 const stateManager = {
-  stateManager: {
-    getState: () => ({
-      timeBucket: "20240101120000", // Hour bucket: 2024-01-01 12:00
-      eventId: eventId, // Start from first event AFTER 12:30:00
-    }),
-    setState: (state) => {
-      // Extract timestamp from event ID
-      const timestamp = TimeUuid.fromString(state.eventId).getDate()
-      console.log(`Processed up to: ${timestamp.toISOString()}`)
-    },
+  getState: () => ({
+    timeBucket: "20240101120000", // Hour bucket: 2024-01-01 12:00
+    eventId, // Start from first event AFTER 12:30:00
+  }),
+  setState: (state) => {
+    const timestamp = state.eventId ? TimeUuid.fromString(state.eventId).getDate() : undefined
+    console.log("Saved processing frontier", state.timeBucket, timestamp?.toISOString())
   },
 }
 // Other useful TimeUuid methods:
@@ -434,28 +406,15 @@ stateManager: {
 **Best for**: Single instance deployments, simple persistence needs
 
 ```typescript
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 
 stateManager: {
   getState: () => {
-    try {
-      const data = readFileSync('pump-state.json', 'utf8');
-      const state = JSON.parse(data);
-      console.log('Resuming from saved state:', state);
-      return state;
-    } catch (error) {
-      console.log('No previous state found, starting fresh');
-      return null; // Start in live mode
-    }
+    if (!existsSync("pump-state.json")) return null
+    return JSON.parse(readFileSync("pump-state.json", "utf8"))
   },
   setState: (state) => {
-    try {
-      writeFileSync('pump-state.json', JSON.stringify(state, null, 2));
-      console.log('State saved:', state);
-    } catch (error) {
-      console.error('Failed to save state:', error);
-      // Consider throwing to stop pump if state saving is critical
-    }
+    writeFileSync("pump-state.json", JSON.stringify(state, null, 2))
   }
 }
 ```
@@ -479,9 +438,9 @@ stateManager: {
 ```sql
 -- Example table schema
 CREATE TABLE flowcore_pump_state (
-  id VARCHAR(50) PRIMARY KEY,      -- Instance identifier
+  id VARCHAR(50) PRIMARY KEY,       -- Logical consumer identifier
   time_bucket VARCHAR(14) NOT NULL, -- "yyyyMMddHH0000"
-  event_id VARCHAR(255),           -- Last processed event ID
+  event_id VARCHAR(255),            -- Conservative processing frontier
   updated_at TIMESTAMP DEFAULT NOW()
 );
 ```
@@ -509,9 +468,7 @@ stateManager: {
 
     } catch (error) {
       console.error('Failed to load state from database:', error);
-      // Critical decision: start fresh or fail fast?
-      return null; // Start fresh if DB is down
-      // throw error; // Or fail fast if state is critical
+      throw error; // Do not silently jump to "now" when durable state is unavailable.
     }
   },
 
@@ -537,10 +494,10 @@ stateManager: {
 **✅ Benefits:**
 
 - Survives crashes and restarts
-- Supports multiple instances
+- Supports shared state for cluster mode
 - Atomic updates with transactions
 - Can be backed up with your database
-- Enables horizontal scaling
+- Enables coordinated horizontal scaling
 
 **⚠️ Considerations:**
 
@@ -548,62 +505,47 @@ stateManager: {
 - Network latency on state updates
 - Requires error handling strategy
 
-### State Management Patterns
+### Independent Consumers and Shared Clusters
 
-#### Multi-Instance Coordination
+Use separate state keys when instances intentionally process different event selections as independent consumers:
 
 ```typescript
-// Each instance processes different event types
-const instanceId = `processor-${process.env.INSTANCE_ID}`;
+const consumerId = process.env.CONSUMER_ID!;
 
 stateManager: {
   getState: async () => {
     const result = await db.query(
       'SELECT time_bucket, event_id FROM flowcore_pump_state WHERE id = ?',
-      [instanceId] // Each instance has unique state
+      [consumerId]
     );
     return result[0] || null;
   },
   setState: async (state) => {
     await db.query(
       'INSERT OR REPLACE INTO flowcore_pump_state (id, time_bucket, event_id) VALUES (?, ?, ?)',
-      [instanceId, state.timeBucket, state.eventId]
+      [consumerId, state.timeBucket, state.eventId]
     );
   }
 }
 ```
 
-#### Checkpoint Strategy
+Do not use separate state rows for replicas that are meant to share one workload. Use `FlowcoreDataPumpCluster` with one
+shared durable state manager so only the elected leader fetches and advances the logical checkpoint.
 
-```typescript
-// Save state every N events for performance
-let eventCount = 0;
-const CHECKPOINT_INTERVAL = 100;
-
-stateManager: {
-  getState: () => loadStateFromFile(),
-  setState: (state) => {
-    eventCount++;
-    // Only save every 100 events to reduce I/O
-    if (eventCount % CHECKPOINT_INTERVAL === 0) {
-      saveStateToFile(state);
-      console.log(`Checkpoint saved after ${eventCount} events`);
-    }
-  }
-}
-```
+Persist every state update unless your storage adapter can prove that coalescing writes cannot advance beyond unfinished
+work. Skipping arbitrary checkpoint writes can increase replay and make the stored frontier misleading.
 
 ### Choosing a State Manager
 
-| Scenario                        | Recommended              | Reason                             |
-| ------------------------------- | ------------------------ | ---------------------------------- |
-| **Local development**           | Memory                   | Fast iteration, no setup           |
-| **Testing/CI**                  | Memory                   | Clean state per test run           |
-| **Single instance, simple**     | File-based               | Persistence without DB complexity  |
-| **Production, single instance** | Database                 | Reliability and backup integration |
-| **Multi-instance**              | Database                 | Shared state coordination          |
-| **High-throughput**             | Database + Checkpointing | Performance optimization           |
-| **Mission-critical**            | Database + Monitoring    | Full observability stack           |
+| Scenario                        | Recommended             | Reason                             |
+| ------------------------------- | ----------------------- | ---------------------------------- |
+| **Local development**           | Memory                  | Fast iteration, no setup           |
+| **Testing/CI**                  | Memory                  | Clean state per test run           |
+| **Single instance, simple**     | File-based              | Persistence without DB complexity  |
+| **Production, single instance** | Database                | Reliability and backup integration |
+| **Independent consumers**       | Database, separate keys | Separate selections and positions  |
+| **Shared worker cluster**       | Database + cluster mode | One elected fetcher and checkpoint |
+| **Mission-critical**            | Database + Monitoring   | Full observability stack           |
 
 ## Notification Methods
 
@@ -616,6 +558,10 @@ notifier: {
   type: "websocket"
 }
 ```
+
+WebSocket waits have a 20-second safety timeout. An event, connection error, abort signal, or timeout releases the wait so
+the fetch loop can query durable storage again. Each cycle creates a fresh client, allowing the pump to recover from a
+hung or half-open connection.
 
 ### NATS
 
@@ -635,8 +581,109 @@ Simple polling mechanism:
 ```typescript
 notifier: {
   type: "poller",
-  intervalMs: 5000 // Poll every 5 seconds
+  intervalMs: 1000
 }
+```
+
+> **Version 0.22.x caveat:** The implementation currently uses `Math.min(intervalMs, 1000)`. Values above one second
+> therefore still wake after one second. Account for the API traffic until this behavior is corrected.
+
+Notifications only wake the pump. Flowcore event history and the persisted state remain the durable recovery mechanism.
+
+## Cluster Mode
+
+`FlowcoreDataPumpCluster` scales handler execution while keeping one logical fetcher and one shared checkpoint. Every
+replica registers with a coordinator and participates in lease election. The leader runs `FlowcoreDataPump`; other
+instances process batches distributed by the leader.
+
+Cluster mode requires a durable state manager and a user-provided `FlowcoreDataPumpCoordinator`. The package defines the
+coordinator contract but does not ship a production implementation:
+
+```typescript
+interface FlowcoreDataPumpCoordinator {
+  acquireLease(instanceId: string, key: string, ttlMs: number): Promise<boolean>
+  renewLease(instanceId: string, key: string, ttlMs: number): Promise<boolean>
+  releaseLease(instanceId: string, key: string): Promise<void>
+  register(instanceId: string, address: string): Promise<void>
+  heartbeat(instanceId: string): Promise<void>
+  unregister(instanceId: string): Promise<void>
+  getInstances(staleThresholdMs: number): Promise<
+    Array<{
+      instanceId: string
+      address: string
+    }>
+  >
+}
+```
+
+Lease acquisition must be atomic. Renewal must succeed only for the current holder, and `getInstances()` must omit stale
+registrations. The `integration/app` directory contains a PostgreSQL reference used by the Kubernetes integration suite.
+
+### NATS Distribution
+
+Setting `notifier.type` to `nats` also selects NATS request/reply for cluster event distribution:
+
+```typescript
+import { FlowcoreDataPumpCluster } from "@flowcore/data-pump"
+
+const cluster = new FlowcoreDataPumpCluster({
+  auth: { apiKey: process.env.FLOWCORE_API_KEY! },
+  dataSource: {
+    tenant: "acme",
+    dataCore: "commerce",
+    flowType: "order.0",
+    eventTypes: ["order.placed.0"],
+  },
+  stateManager: sharedStateManager,
+  coordinator: postgresCoordinator,
+  notifier: {
+    type: "nats",
+    servers: [process.env.NATS_URL!],
+  },
+  clusterKey: "orders-projection-v1",
+  workerConcurrency: 10,
+  processor: {
+    handler: async (events) => {
+      for (const event of events) await processIdempotently(event)
+    },
+  },
+})
+
+await cluster.start()
+```
+
+All replicas join the `data-pump-workers` queue group, including the leader. A distribution request waits up to 30
+seconds for a reply. If NATS distribution fails, the leader runs the handler locally. A worker may have committed before
+its reply was lost, so this fallback preserves at-least-once rather than exactly-once behavior.
+
+`clusterKey` scopes the NATS subject. In 0.22.x the internal leader lease key is fixed to
+`flowcore-data-pump-leader`; it is not scoped by `clusterKey`. Namespace coordinator storage when unrelated logical
+clusters share a database.
+
+### WebSocket Distribution
+
+All non-NATS cluster configurations use a WebSocket mesh. Each replica must:
+
+1. Host a WebSocket server and pass accepted connections to `cluster.handleConnection()`.
+2. Configure an `advertisedAddress` reachable by every peer.
+3. Register and heartbeat through the shared coordinator.
+
+The leader discovers live workers every ten seconds and sends complete batches round-robin. Connections use ping/pong
+health checks, and each delivery has a 30-second acknowledgment timeout. If no worker is available, the leader processes
+locally.
+
+The default lease TTL is 30 seconds, renewal interval is 10 seconds, and heartbeat interval is 5 seconds. Tune those
+values together. Cluster mode exposes the automatic processor model only; it does not expose `reserve()`,
+`acknowledge()`, `fail()`, or `restart()`.
+
+Stop a cluster gracefully so it can release its lease and unregister:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await cluster.stop()
+  await db.end()
+  process.exit(0)
+})
 ```
 
 ## ⚙️ Configuration Reference
@@ -647,16 +694,17 @@ notifier: {
 | `dataSource`            | `FlowcoreDataPumpDataSource`      | **Required** | Data source configuration (tenant, dataCore, flowType, eventTypes)                                                                                                        |
 | `stateManager`          | `FlowcoreDataPumpStateManager`    | **Required** | State persistence configuration                                                                                                                                           |
 | `bufferSize`            | `number`                          | `1000`       | Maximum events to buffer in memory                                                                                                                                        |
-| `maxRedeliveryCount`    | `number`                          | `3`          | Max retry attempts before marking event as failed                                                                                                                         |
-| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Timeout for event acknowledgment                                                                                                                                          |
+| `maxRedeliveryCount`    | `number`                          | `3`          | Redeliveries after the initial attempt; `-1` disables the cap                                                                                                             |
+| `achknowledgeTimeoutMs` | `number`                          | `5000`       | Fixed timeout before an unresolved reservation reopens (spelling preserved by the public API)                                                                             |
 | `includeSensitiveData`  | `boolean`                         | `false`      | Include sensitive data in events                                                                                                                                          |
-| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration                                                                                                                                        |
+| `processor`             | `FlowcoreDataPumpProcessor`       | `undefined`  | Automatic processing configuration; `concurrency` is the handler batch size in 0.22.x                                                                                     |
 | `notifier`              | `FlowcoreDataPumpNotifierOptions` | `websocket`  | Notification method configuration                                                                                                                                         |
 | `logger`                | `FlowcoreLogger`                  | `undefined`  | Custom logger implementation                                                                                                                                              |
 | `stopAt`                | `Date`                            | `undefined`  | Stop processing at specific date (for historical processing)                                                                                                              |
 | `baseUrlOverride`       | `string`                          | `undefined`  | Override Flowcore API base URL                                                                                                                                            |
-| `noTranslation`         | `boolean`                         | `false`      | Skip name-to-ID translation. This is mostly for performance reasons.                                                                                                      |
+| `noTranslation`         | `boolean`                         | `false`      | Treat tenant, data core, flow type, and event type values as IDs and skip translation                                                                                     |
 | `directMode`            | `boolean`                         | `false`      | Enables direct API execution mode, bypassing intermediary gateways; recommended for dedicated Flowcore clusters to reduce latency (often used with `noTranslation: true`) |
+| `pulse`                 | `object`                          | `undefined`  | Periodically send pump position, buffer, counters, and uptime to a Flowcore control-plane endpoint                                                                        |
 
 ## 🔧 API Reference
 
@@ -724,30 +772,27 @@ if (dataPump.isRunning) {
   console.log("Pump is running")
 }
 
-// Start the pump
+// Blocking: resolves when the fetch loop stops and rejects on a fetch error.
 await dataPump.start()
 
-// Stop the pump
-dataPump.stop()
-
-// Restart from a specific position - stops current processing and resumes from new location
-// This is useful for backfill scenarios, error recovery, and dynamic repositioning
-dataPump.restart({
-  timeBucket: "20240101120000", // Required: target time bucket
-  eventId: "specific-event-id", // Optional: specific event (omit to start from first event in bucket)
+// Background/self-healing: fetch errors retry with exponential backoff.
+await dataPump.start((error) => {
+  if (error) console.error("Data Pump stopped", error)
 })
 
-// Restart with a new stop date - change both position AND stop condition
-dataPump.restart(
-  { timeBucket: "20240101120000" },
-  new Date("2024-01-02"), // New stopAt date (or null to remove limit)
-)
+// Stop immediately. The in-memory buffer is cleared rather than drained.
+dataPump.stop()
 
-// Common restart patterns:
-// 1. Jump to historical data: dataPump.restart({ timeBucket: firstTimeBucket })
-// 2. Reprocess from error point: dataPump.restart(lastKnownGoodState)
-// 3. Start backfill operation: dataPump.restart({ timeBucket: "20240101000000" }, endDate)
+// Restart from a specific position. The bucket must contain exactly 14 digits.
+dataPump.restart({
+  timeBucket: "20240101120000",
+  eventId: "specific-event-id",
+})
 ```
+
+Restart clears the current buffer and refreshes available time buckets. In 0.22.x, the optional
+`restart(state, stopAt)` argument updates the option but does not rebuild the internal stop boundary. Create a new pump
+when changing `stopAt`.
 
 #### Pull Mode Methods (Manual Processing)
 
@@ -756,13 +801,39 @@ const events = await dataPump.reserve(10) // Mark 10 events as reserved for proc
 
 await dataPump.acknowledge(events.map((e) => e.eventId))
 
+// Terminal: removes these events. This does not retry them.
 await dataPump.fail(["event-id-1", "event-id-2"])
 
-// Handle events that permanently failed (exceeded retry limit)
+// Called only after timeout-based redelivery exceeds maxRedeliveryCount.
 dataPump.onFinalyFailed(async (failedEvents) => {
   console.log(`${failedEvents.length} events permanently failed`)
 })
 ```
+
+`onFinalyFailed` is the current public spelling.
+
+## Pulse Status Reporting
+
+The optional pulse emitter reports pump status to a Flowcore control-plane endpoint:
+
+```typescript
+const dataPump = FlowcoreDataPump.create({
+  // ...required options...
+  pulse: {
+    url: process.env.FLOWCORE_CONTROL_PLANE_URL!,
+    pathwayId: process.env.FLOWCORE_PATHWAY_ID!,
+    sourceId: process.env.PUMP_SOURCE_ID,
+    intervalMs: 30_000,
+    successLogLevel: "debug",
+    failureLogLevel: "warn",
+  },
+})
+```
+
+Pulses include the current bucket and event ID, live status, buffer depth and reserved count, payload bytes, cumulative
+pulled, acknowledged and failed counts, and uptime. The first pulse is randomly staggered within the interval so replicas
+do not all report at once. Pulse failures are logged and do not stop processing. `pulse.url` is independent of
+`baseUrlOverride`.
 
 ## Monitoring & Metrics
 
@@ -772,9 +843,9 @@ The data pump exposes Prometheus-compatible metrics:
 import { dataPumpPromRegistry } from "@flowcore/data-pump"
 
 // Express.js example
-app.get("/metrics", (req, res) => {
+app.get("/metrics", async (req, res) => {
   res.set("Content-Type", dataPumpPromRegistry.contentType)
-  res.end(dataPumpPromRegistry.metrics())
+  res.end(await dataPumpPromRegistry.metrics())
 })
 ```
 
@@ -787,5 +858,11 @@ app.get("/metrics", (req, res) => {
 - `flowcore_data_pump_events_failed_counter` - Failed events
 - `flowcore_data_pump_events_pulled_size_bytes_counter` - Data throughput
 - `flowcore_data_pump_sdk_commands_counter` - API calls to Flowcore
+- `flowcore_data_pump_cluster_active_workers_gauge` - Connected cluster workers
+- `flowcore_data_pump_cluster_leader_status_gauge` - `1` on the elected leader
+- `flowcore_data_pump_cluster_events_distributed_counter` - Events sent to workers
+- `flowcore_data_pump_cluster_worker_acks_counter` - Successful worker batch acknowledgments
+- `flowcore_data_pump_cluster_worker_fails_counter` - Failed worker batch deliveries
 
-All metrics include labels: `tenant`, `data_core`, `flow_type`, `event_type`
+Pump event metrics use `tenant`, `data_core`, `flow_type`, and `event_type` labels. The SDK command counter uses only
+`command`. Cluster metrics currently have no tenant or event labels and are process-local.
