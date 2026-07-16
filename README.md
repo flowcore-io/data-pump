@@ -198,9 +198,15 @@ reconnections.
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
-  auth: {/* auth config */},
-  dataSource: {/* data source config */},
-  stateManager: {/* state management */},
+  auth: {
+    /* auth config */
+  },
+  dataSource: {
+    /* data source config */
+  },
+  stateManager: {
+    /* state management */
+  },
   processor: {
     concurrency: 5,
     handler: async (events) => {
@@ -234,9 +240,15 @@ await dataPump.start((error) => {
 
 ```typescript
 const dataPump = FlowcoreDataPump.create({
-  auth: {/* auth config */},
-  dataSource: {/* data source config */},
-  stateManager: {/* state management */},
+  auth: {
+    /* auth config */
+  },
+  dataSource: {
+    /* data source config */
+  },
+  stateManager: {
+    /* state management */
+  },
   // ❌ No processor = manual mode
 })
 
