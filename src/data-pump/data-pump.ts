@@ -15,6 +15,8 @@ import type {
   FlowcoreLogger,
 } from "./types.ts"
 
+const textEncoder = new TextEncoder()
+
 interface FlowcoreDataPumpNotifierNatsOptions {
   type: "nats"
   servers: string[]
@@ -78,7 +80,15 @@ interface FlowcoreDataPumpBufferItem {
   event: FlowcoreEvent
   status: "open" | "reserved"
   deliveryCount: number
+  payloadSizeBytes: number
+  eventSizeBytes?: number
   deliveryId?: string
+}
+
+interface FlowcoreDataPumpBufferStats {
+  eventCount: number
+  eventReservedCount: number
+  eventSizeBytes: number
 }
 
 export class FlowcoreDataPump {
@@ -99,6 +109,10 @@ export class FlowcoreDataPump {
   private processLoopRestartAttempts = 0
   private mainLoopRestartAttempts = 0
   private readonly replayObserver: ReplayStageObserver
+  private readonly bufferStats = new Map<string, FlowcoreDataPumpBufferStats>()
+  private bufferReservedCount = 0
+  private bufferSizeBytes = 0
+  private gaugePublicationScheduled = false
 
   private constructor(
     public readonly dataSource: FlowcoreDataSource,
@@ -112,6 +126,9 @@ export class FlowcoreDataPump {
       data_core: this.dataSource.dataCore,
       flow_type: this.dataSource.flowType,
     })
+    for (const eventType of this.dataSource.eventTypes) {
+      this.bufferStats.set(eventType, { eventCount: 0, eventReservedCount: 0, eventSizeBytes: 0 })
+    }
     this.bufferState = {
       timeBucket: format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
       eventId: TimeUuid.now().toString(),
@@ -124,8 +141,6 @@ export class FlowcoreDataPump {
 
   public getSnapshot(): PulseSnapshot | null {
     if (!this.running) return null
-    const reserved = this.buffer.filter((b) => b.status === "reserved").length
-    const sizeBytes = this.buffer.reduce((sum, b) => sum + JSON.stringify(b.event.payload).length, 0)
     return {
       pathwayId: this.pulseEmitter ? "" : "", // set by caller
       flowType: this.dataSource.flowType,
@@ -133,8 +148,8 @@ export class FlowcoreDataPump {
       eventId: this.bufferState.eventId,
       isLive: this.isLive,
       bufferDepth: this.buffer.length,
-      bufferReserved: reserved,
-      bufferSizeBytes: sizeBytes,
+      bufferReserved: this.bufferReservedCount,
+      bufferSizeBytes: this.bufferSizeBytes,
       acknowledgedTotal: this.acknowledgedCount,
       failedTotal: this.failedCount,
       pulledTotal: this.pulledCount,
@@ -219,7 +234,7 @@ export class FlowcoreDataPump {
     this.running = true
     this.startedAt = Date.now()
     this.nextCursor = undefined
-    this.updateMetricsGauges()
+    this.updateMetricsGauges(true)
     this.pulseEmitter?.start()
     const currentState = await this.stateManager.getState()
     const timeBucket = currentState
@@ -293,7 +308,8 @@ export class FlowcoreDataPump {
     this.processLoopRestartAttempts = 0
     this.mainLoopRestartAttempts = 0
     this.buffer = []
-    this.updateMetricsGauges()
+    this.resetBufferStats()
+    this.updateMetricsGauges(true)
     this.pulseEmitter?.stop()
     this.abortController?.abort()
     this.waiterBufferThreshold?.()
@@ -346,7 +362,7 @@ export class FlowcoreDataPump {
 
       this.pulledCount += events.length
       this.mainLoopRestartAttempts = 0
-      this.buffer.push(...events.map((event) => ({ event, status: "open" as const, deliveryCount: 0 })))
+      this.addEventsToBuffer(events)
       this.nextCursor = nextCursor
       this.updateMetricsGauges()
 
@@ -425,8 +441,10 @@ export class FlowcoreDataPump {
         event.status = "reserved"
         event.deliveryId = deliveryId
         event.deliveryCount++
+        this.updateReservedStats(event, 1)
         events.push(event.event)
-        this.incMetricsCounter("pulled", event.event.eventType, JSON.stringify(event.event).length)
+        event.eventSizeBytes ??= textEncoder.encode(JSON.stringify(event.event)).byteLength
+        this.incMetricsCounter("pulled", event.event.eventType, event.eventSizeBytes)
         if (events.length === amount) {
           break
         }
@@ -441,10 +459,12 @@ export class FlowcoreDataPump {
     this.updateMetricsGauges()
 
     setTimeout(() => {
-      this.reOpen(
+      void this.reOpen(
         events.map((event) => event.eventId),
         deliveryId,
-      )
+      ).catch((error) => {
+        this.logger?.error("Failed to reopen events after acknowledgement timeout", { error })
+      })
     }, this.options.achknowledgeTimeoutMs)
 
     return events
@@ -458,12 +478,14 @@ export class FlowcoreDataPump {
     if (!this.running) {
       return
     }
+    const eventIdSet = new Set(eventIds)
     const checkpointEventId = this.replayObserver.observeAcknowledgement(() => {
       const lastEventInBuffer = this.buffer[this.buffer.length - 1]
       this.buffer = this.buffer.filter((event) => {
-        if (eventIds.includes(event.event.eventId)) {
+        if (eventIdSet.has(event.event.eventId)) {
           this.incMetricsCounter("acknowledged", event.event.eventType, 1)
           this.acknowledgedCount++
+          this.removeFromBufferStats(event)
           return false
         }
         return true
@@ -476,12 +498,12 @@ export class FlowcoreDataPump {
       return this.buffer.length ? undefined : lastEventInBuffer?.event.eventId
     })
 
-    await this.updateState(checkpointEventId)
-
     this.updateMetricsGauges()
 
-    if (!this.buffer.length) {
-      this.waiterBufferEmpty?.()
+    try {
+      await this.updateState(checkpointEventId)
+    } finally {
+      this.notifyBufferEmpty()
     }
   }
 
@@ -490,46 +512,54 @@ export class FlowcoreDataPump {
       return
     }
     const lastEventInBuffer = this.buffer[this.buffer.length - 1]
+    const eventIdSet = new Set(eventIds)
     const failedEvents: FlowcoreEvent[] = []
     this.buffer = this.buffer.filter((event) => {
-      if (eventIds.includes(event.event.eventId)) {
+      if (eventIdSet.has(event.event.eventId)) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
         this.failedCount++
         failedEvents.push(event.event)
+        this.removeFromBufferStats(event)
         return false
       }
       return true
     })
     this.logger?.info(`Failed ${failedEvents.length} events`)
-    void this.options.processor?.failedHandler?.(failedEvents)
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
     }
 
-    await this.updateState(this.buffer.length ? undefined : lastEventInBuffer?.event.eventId)
+    this.updateMetricsGauges()
 
-    if (!this.buffer.length) {
-      this.waiterBufferEmpty?.()
+    try {
+      await this.options.processor?.failedHandler?.(failedEvents)
+      await this.updateState(this.buffer.length ? undefined : lastEventInBuffer?.event.eventId)
+    } finally {
+      this.notifyBufferEmpty()
     }
   }
 
   private async reOpen(eventIds: string[], deliveryId: string) {
+    const eventIdSet = new Set(eventIds)
     let lastEvent: FlowcoreEvent | undefined
     const failedEvents: FlowcoreEvent[] = []
     const reopenedEvents: FlowcoreEvent[] = []
     this.buffer = this.buffer.filter((event) => {
-      if (event.deliveryId !== deliveryId || !eventIds.includes(event.event.eventId)) {
+      if (event.deliveryId !== deliveryId || !eventIdSet.has(event.event.eventId)) {
         return true
       }
       if (this.options.maxRedeliveryCount > -1 && event.deliveryCount > this.options.maxRedeliveryCount) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
+        this.failedCount++
         failedEvents.push(event.event)
         lastEvent = event.event
+        this.removeFromBufferStats(event)
         return false
       }
       event.status = "open"
       event.deliveryId = undefined
+      this.updateReservedStats(event, -1)
       reopenedEvents.push(event.event)
       return true
     })
@@ -546,17 +576,25 @@ export class FlowcoreDataPump {
     }
 
     this.logger?.info(`Failed ${failedEvents.length} events`)
-    void this.options.processor?.failedHandler?.(failedEvents)
-    void this.finallyFailedHandler?.(failedEvents)
 
     if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
       this.waiterBufferThreshold?.()
     }
 
-    await this.updateState(this.buffer.length ? undefined : lastEvent?.eventId)
-
-    if (!this.buffer.length) {
-      this.waiterBufferEmpty?.()
+    try {
+      const callbackResults = await Promise.allSettled([
+        Promise.resolve().then(() => this.options.processor?.failedHandler?.(failedEvents)),
+        Promise.resolve().then(() => this.finallyFailedHandler?.(failedEvents)),
+      ])
+      const callbackFailure = callbackResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      )
+      if (callbackFailure) {
+        throw callbackFailure.reason
+      }
+      await this.updateState(this.buffer.length ? undefined : lastEvent?.eventId)
+    } finally {
+      this.notifyBufferEmpty()
     }
   }
 
@@ -598,63 +636,76 @@ export class FlowcoreDataPump {
 
   // #region Metrics
 
-  private updateMetricsGauges() {
-    const stats = new Map<
-      string,
-      {
-        eventCount: number
-        eventReservedCount: number
-        eventSizeBytes: number
+  private addEventsToBuffer(events: FlowcoreEvent[]): void {
+    for (const event of events) {
+      const item: FlowcoreDataPumpBufferItem = {
+        event,
+        status: "open",
+        deliveryCount: 0,
+        payloadSizeBytes: textEncoder.encode(JSON.stringify(event.payload)).byteLength,
       }
-    >()
-    for (const eventType of this.dataSource.eventTypes) {
-      stats.set(eventType, {
-        eventCount: 0,
-        eventReservedCount: 0,
-        eventSizeBytes: 0,
-      })
+      this.buffer.push(item)
+      this.bufferSizeBytes += item.payloadSizeBytes
+      const stat = this.bufferStats.get(event.eventType)
+      if (stat) {
+        stat.eventCount++
+        stat.eventSizeBytes += item.payloadSizeBytes
+      }
     }
+  }
 
-    for (const item of this.buffer) {
-      const stat = stats.get(item.event.eventType)
-      if (!stat) {
-        continue
-      }
-      stat.eventCount++
-      if (item.status === "reserved") {
-        stat.eventReservedCount++
-      }
-      stat.eventSizeBytes += JSON.stringify(item.event.payload).length
+  private updateReservedStats(item: FlowcoreDataPumpBufferItem, delta: 1 | -1): void {
+    this.bufferReservedCount += delta
+    const stat = this.bufferStats.get(item.event.eventType)
+    if (stat) stat.eventReservedCount += delta
+  }
+
+  private removeFromBufferStats(item: FlowcoreDataPumpBufferItem): void {
+    this.bufferSizeBytes -= item.payloadSizeBytes
+    const stat = this.bufferStats.get(item.event.eventType)
+    if (stat) {
+      stat.eventCount--
+      stat.eventSizeBytes -= item.payloadSizeBytes
     }
+    if (item.status === "reserved") this.updateReservedStats(item, -1)
+  }
 
-    for (const [eventType, stat] of stats) {
-      metrics.bufferEventCountGauge.set(
-        {
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        },
-        stat.eventCount,
-      )
-      metrics.bufferReservedEventCountGauge.set(
-        {
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        },
-        stat.eventReservedCount,
-      )
-      metrics.bufferSizeBytesGauge.set(
-        {
-          tenant: this.dataSource.tenant,
-          data_core: this.dataSource.dataCore,
-          flow_type: this.dataSource.flowType,
-          event_type: eventType,
-        },
-        stat.eventSizeBytes,
-      )
+  private resetBufferStats(): void {
+    this.bufferReservedCount = 0
+    this.bufferSizeBytes = 0
+    for (const stat of this.bufferStats.values()) {
+      stat.eventCount = 0
+      stat.eventReservedCount = 0
+      stat.eventSizeBytes = 0
+    }
+  }
+
+  private updateMetricsGauges(synchronous = false): void {
+    if (synchronous) {
+      this.gaugePublicationScheduled = false
+      this.publishMetricsGauges()
+      return
+    }
+    if (this.gaugePublicationScheduled) return
+    this.gaugePublicationScheduled = true
+    queueMicrotask(() => {
+      if (!this.gaugePublicationScheduled) return
+      this.gaugePublicationScheduled = false
+      this.publishMetricsGauges()
+    })
+  }
+
+  private publishMetricsGauges(): void {
+    for (const [eventType, stat] of this.bufferStats) {
+      const labels = {
+        tenant: this.dataSource.tenant,
+        data_core: this.dataSource.dataCore,
+        flow_type: this.dataSource.flowType,
+        event_type: eventType,
+      }
+      metrics.bufferEventCountGauge.set(labels, stat.eventCount)
+      metrics.bufferReservedEventCountGauge.set(labels, stat.eventReservedCount)
+      metrics.bufferSizeBytesGauge.set(labels, stat.eventSizeBytes)
     }
   }
 
@@ -717,6 +768,12 @@ export class FlowcoreDataPump {
   }
 
   private waiterBufferEmpty?: () => void
+  private notifyBufferEmpty(): void {
+    if (!this.buffer.length) {
+      this.waiterBufferEmpty?.()
+    }
+  }
+
   private async waitForBufferEmpty() {
     if (!this.buffer.length) {
       return
