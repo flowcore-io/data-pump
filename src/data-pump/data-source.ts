@@ -49,6 +49,8 @@ export class FlowcoreDataSource {
   protected eventTypeIds?: string[]
   /** Cached time buckets */
   protected timeBuckets?: string[]
+  /** Index for each cached bucket. */
+  private timeBucketIndexes = new Map<string, number>()
 
   /**
    * Creates a new FlowcoreDataSource instance
@@ -205,14 +207,46 @@ export class FlowcoreDataSource {
           eventTypeId: (await this.getEventTypeIds()) as [string, ...string[]],
           cursor: cursor || undefined,
           pageSize: 10_000,
+          order: "asc",
         }),
         this.options.directMode,
       )
       timeBuckets.push(...result.timeBuckets)
       cursor = result.nextCursor
     } while (cursor !== undefined)
-    this.timeBuckets = timeBuckets
+    const normalizedTimeBuckets = [...new Set(timeBuckets.sort())]
+    this.timeBuckets = normalizedTimeBuckets
+    this.timeBucketIndexes = new Map()
+    for (let index = 0; index < normalizedTimeBuckets.length; index++) {
+      this.timeBucketIndexes.set(normalizedTimeBuckets[index], index)
+    }
     return this.timeBuckets
+  }
+
+  private lowerBoundTimeBucket(timeBucket: string): number {
+    const timeBuckets = this.timeBuckets ?? []
+    const target = Number.parseFloat(timeBucket)
+    let low = 0
+    let high = timeBuckets.length
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2)
+      if (Number.parseFloat(timeBuckets[middle]) < target) low = middle + 1
+      else high = middle
+    }
+    return low
+  }
+
+  private upperBoundTimeBucket(timeBucket: string): number {
+    const timeBuckets = this.timeBuckets ?? []
+    const target = Number.parseFloat(timeBucket)
+    let low = 0
+    let high = timeBuckets.length
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2)
+      if (Number.parseFloat(timeBuckets[middle]) <= target) low = middle + 1
+      else high = middle
+    }
+    return low
   }
 
   /**
@@ -226,8 +260,8 @@ export class FlowcoreDataSource {
       return null
     }
     const timeBuckets = await this.getTimeBuckets()
-    const index = timeBuckets.indexOf(closestTimeBucket)
-    if (index === -1) {
+    const index = this.timeBucketIndexes.get(closestTimeBucket)
+    if (index === undefined) {
       throw new Error(`Could not get next timeBucket, timeBucket ${timeBucket} not found`)
     }
     return timeBuckets[index + 1] ?? null
@@ -245,16 +279,14 @@ export class FlowcoreDataSource {
     if (!timeBucket.match(/^\d{14}$/)) {
       throw new Error(`Invalid timebucket: ${timeBucket}`)
     }
-    if (getBefore) {
-      return (
-        timeBuckets.findLast((t) => Number.parseFloat(t) <= Number.parseFloat(timeBucket)) ??
-        timeBuckets[timeBuckets.length - 1]
-      )
+    if (!timeBuckets.length) {
+      return null
     }
-    return (
-      timeBuckets.find((t) => Number.parseFloat(t) >= Number.parseFloat(timeBucket)) ??
-      timeBuckets[timeBuckets.length - 1]
-    )
+    if (getBefore) {
+      const index = this.upperBoundTimeBucket(timeBucket) - 1
+      return timeBuckets[index] ?? timeBuckets[timeBuckets.length - 1]
+    }
+    return timeBuckets[this.lowerBoundTimeBucket(timeBucket)] ?? timeBuckets[timeBuckets.length - 1]
   }
 
   /**
