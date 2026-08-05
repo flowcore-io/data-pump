@@ -3,7 +3,7 @@ import type { FlowcoreEvent } from "@flowcore/sdk"
 import { TimeUuid } from "@flowcore/time-uuid"
 import { format, startOfHour } from "date-fns"
 import { FlowcoreDataSource } from "./data-source.ts"
-import { metrics } from "./metrics.ts"
+import { metrics, ReplayStageObserver } from "./metrics.ts"
 import { FlowcoreNotifier } from "./notifier.ts"
 import { PulseEmitter, type PulseSnapshot } from "./pulse.ts"
 import type {
@@ -98,6 +98,7 @@ export class FlowcoreDataPump {
   private pulledCount = 0
   private processLoopRestartAttempts = 0
   private mainLoopRestartAttempts = 0
+  private readonly replayObserver: ReplayStageObserver
 
   private constructor(
     public readonly dataSource: FlowcoreDataSource,
@@ -106,6 +107,11 @@ export class FlowcoreDataPump {
     private readonly options: FlowcoreDataPumpInnerOptions,
     private readonly logger?: FlowcoreLogger,
   ) {
+    this.replayObserver = new ReplayStageObserver(metrics, {
+      tenant: this.dataSource.tenant,
+      data_core: this.dataSource.dataCore,
+      flow_type: this.dataSource.flowType,
+    })
     this.bufferState = {
       timeBucket: format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
       eventId: TimeUuid.now().toString(),
@@ -296,8 +302,9 @@ export class FlowcoreDataPump {
     }
   }
 
-  private updateState(eventId?: string) {
-    if (!this.stateManager.setState) {
+  private updateState(eventId?: string): Promise<void> | void {
+    const stateManager = this.stateManager
+    if (!stateManager.setState) {
       return
     }
     const stateEventId = eventId ?? this.buffer[0]?.event.eventId
@@ -306,7 +313,7 @@ export class FlowcoreDataPump {
     }
     const date = TimeUuid.fromString(stateEventId).getDate()
     const timeBucket = format(startOfHour(utc(date)), "yyyyMMddHH0000")
-    return this.stateManager.setState?.({ timeBucket, eventId: stateEventId })
+    return this.replayObserver.observeCheckpoint(() => stateManager.setState!({ timeBucket, eventId: stateEventId }))
   }
 
   private async loop(): Promise<void> {
@@ -315,18 +322,20 @@ export class FlowcoreDataPump {
 
       if (amountToFetch <= 0) {
         this.logger?.info("Buffer is full, waiting for space")
-        await this.waitForBufferThreshold()
+        await this.replayObserver.observeIdle("buffer_full", () => this.waitForBufferThreshold())
         continue
       }
 
       this.logger?.debug(`fetching ${amountToFetch} events from ${this.bufferState.timeBucket}(${this.nextCursor})`)
 
-      const { events, nextCursor } = await this.dataSource.getEvents(
-        this.bufferState,
-        amountToFetch,
-        this.stopAtState?.eventId,
-        this.nextCursor,
-        this.options.includeSensitiveData,
+      const { events, nextCursor } = await this.replayObserver.observeFetch(() =>
+        this.dataSource.getEvents(
+          this.bufferState,
+          amountToFetch,
+          this.stopAtState?.eventId,
+          this.nextCursor,
+          this.options.includeSensitiveData,
+        ),
       )
 
       if (!this.running) {
@@ -370,9 +379,12 @@ export class FlowcoreDataPump {
             this.isLive = true
             this.logger?.debug("Going live...")
             this.abortController = new AbortController()
-            await this.notifier.wait(this.abortController.signal)
+            await this.replayObserver.observeIdle("no_events", () => this.notifier.wait(this.abortController!.signal))
           } else if (this.isLive) {
-            await new Promise((resolve) => setTimeout(resolve, 1000))
+            await this.replayObserver.observeIdle(
+              "no_events",
+              () => new Promise((resolve) => setTimeout(resolve, 1000)),
+            )
           }
         }
       }
@@ -446,21 +458,25 @@ export class FlowcoreDataPump {
     if (!this.running) {
       return
     }
-    const lastEventInBuffer = this.buffer[this.buffer.length - 1]
-    this.buffer = this.buffer.filter((event) => {
-      if (eventIds.includes(event.event.eventId)) {
-        this.incMetricsCounter("acknowledged", event.event.eventType, 1)
-        this.acknowledgedCount++
-        return false
+    const checkpointEventId = this.replayObserver.observeAcknowledgement(() => {
+      const lastEventInBuffer = this.buffer[this.buffer.length - 1]
+      this.buffer = this.buffer.filter((event) => {
+        if (eventIds.includes(event.event.eventId)) {
+          this.incMetricsCounter("acknowledged", event.event.eventType, 1)
+          this.acknowledgedCount++
+          return false
+        }
+        return true
+      })
+
+      if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
+        this.waiterBufferThreshold?.()
       }
-      return true
+
+      return this.buffer.length ? undefined : lastEventInBuffer?.event.eventId
     })
 
-    if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
-      this.waiterBufferThreshold?.()
-    }
-
-    await this.updateState(this.buffer.length ? undefined : lastEventInBuffer?.event.eventId)
+    await this.updateState(checkpointEventId)
 
     this.updateMetricsGauges()
 
@@ -566,7 +582,9 @@ export class FlowcoreDataPump {
     while (this.running) {
       try {
         const events = await this.reserve(this.options.processor?.concurrency ?? 1)
-        await this.options.processor?.handler(events)
+        await this.replayObserver.observeHandler(events, async () => {
+          await this.options.processor?.handler(events)
+        })
         await this.acknowledge(events.map((event) => event.eventId))
         this.processLoopRestartAttempts = 0
       } catch (error) {
@@ -687,7 +705,7 @@ export class FlowcoreDataPump {
     const promise = new Promise<void>((resolve) => {
       this.waiterEvents = resolve
     })
-    await promise
+    await this.replayObserver.observeIdle("waiting_for_events", () => promise)
   }
 
   private waiterBufferThreshold?: () => void
