@@ -448,3 +448,198 @@ describe("backoff formula", () => {
     assertEquals(delays, [1_000, 2_000, 4_000, 8_000, 16_000, 30_000])
   })
 })
+
+// #region restart resumes delivery
+
+/**
+ * `restart()` calls `stop(true)`, which clears `running`. The fetch loop
+ * revives itself from `restartTo`, but the process loop exits on `running` and
+ * only `start()` used to bring it back. A pump restarted while it was
+ * delivering kept pulling and never delivered or checkpointed again, while the
+ * heartbeat above it stayed healthy. Two production pathways stalled that way
+ * for 26 days (2026-08-02 → 2026-08-28).
+ */
+describe("restart resumes the process loop", () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  function event(id: string): FlowcoreEvent {
+    return {
+      eventId: id,
+      eventType: "test.created.0",
+      aggregator: "test",
+      validTime: "2026-03-31T12:00:00.000Z",
+      timeBucket: "20260331120000",
+      payload: {},
+    } as unknown as FlowcoreEvent
+  }
+
+  it("keeps delivering after a restart issued from inside the handler", async () => {
+    const { logger } = createMockLogger()
+    const delivered: string[] = []
+    let batch = 0
+    const fakeDataSource = new FakeDataSource({
+      getEventsImpl: () => {
+        batch++
+        if (batch === 1) return Promise.resolve({ events: [event("evt-1")], nextCursor: undefined })
+        // Keep offering evt-2: restart() clears the buffer, so anything pulled
+        // between the restart request and the resume is re-fetched.
+        if (batch <= 6) return Promise.resolve({ events: [event("evt-2")], nextCursor: undefined })
+        return Promise.resolve({ events: [], nextCursor: undefined })
+      },
+    })
+
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: {
+          tenant: "test",
+          dataCore: "test-dc",
+          flowType: "test.0",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager: createMockStateManager(),
+        processor: {
+          concurrency: 1,
+          handler: (events) => {
+            for (const e of events) {
+              delivered.push(e.eventId)
+              // Restart from inside the handler: the process loop is mid-batch,
+              // so it sees running === false on its next iteration and exits.
+              if (e.eventId === "evt-1") {
+                pump.restart({ timeBucket: "20260331130000" })
+              }
+            }
+            return Promise.resolve()
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        logger,
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+      },
+      fakeDataSource,
+    )
+
+    void pump.start(() => {})
+    await tickAsync(0)
+    assertEquals(delivered[0], "evt-1")
+
+    // Let the fetch loop consume restartTo and pull the next batch.
+    await tickAsync(1_000)
+    await tickAsync(1_000)
+
+    // Before the fix the pump kept pulling and delivered nothing more.
+    assert(delivered.includes("evt-2"), `expected evt-2 to be delivered, got ${JSON.stringify(delivered)}`)
+    assertEquals(pump.isRunning, true)
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+
+  it("does not start a second process loop when one is only parked", async () => {
+    const { logger } = createMockLogger()
+    const delivered: string[] = []
+    let batch = 0
+    const fakeDataSource = new FakeDataSource({
+      getEventsImpl: () => {
+        batch++
+        if (batch === 1) return Promise.resolve({ events: [event("evt-1")], nextCursor: undefined })
+        return Promise.resolve({ events: [], nextCursor: undefined })
+      },
+    })
+
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: {
+          tenant: "test",
+          dataCore: "test-dc",
+          flowType: "test.0",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager: createMockStateManager(),
+        processor: {
+          concurrency: 1,
+          handler: (events) => {
+            for (const e of events) delivered.push(e.eventId)
+            return Promise.resolve()
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        logger,
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+      },
+      fakeDataSource,
+    )
+
+    void pump.start(() => {})
+    await tickAsync(0)
+    assertEquals(delivered, ["evt-1"])
+
+    // The loop is parked in reserve(); a restart must not add a second one.
+    pump.restart({ timeBucket: "20260331130000" })
+    await tickAsync(1_000)
+    await tickAsync(1_000)
+
+    // evt-1 is delivered once, not twice.
+    assertEquals(delivered.filter((id) => id === "evt-1").length, 1)
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+
+  it("restarts the pulse emitter", async () => {
+    const { logger } = createMockLogger()
+    const fakeDataSource = new FakeDataSource()
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: {
+          tenant: "test",
+          dataCore: "test-dc",
+          flowType: "test.0",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager: createMockStateManager(),
+        notifier: { type: "poller", intervalMs: 60_000 },
+        logger,
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+        pulse: { url: "http://localhost:9999", pathwayId: "11111111-1111-1111-1111-111111111111" },
+      },
+      fakeDataSource,
+    )
+
+    const emitter = (pump as unknown as { pulseEmitter: { start: () => void; stop: () => void } }).pulseEmitter
+    let starts = 0
+    const originalStart = emitter.start.bind(emitter)
+    emitter.start = () => {
+      starts++
+      originalStart()
+    }
+
+    void pump.start(() => {})
+    await tickAsync(0)
+    assertEquals(starts, 1)
+
+    pump.restart({ timeBucket: "20260331130000" })
+    await tickAsync(1_000)
+    await tickAsync(1_000)
+
+    // A pump that stops pulsing looks dead to the control plane even while it
+    // is working, so the emitter has to come back with the loops.
+    assertEquals(starts, 2)
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+})
+
+// #endregion

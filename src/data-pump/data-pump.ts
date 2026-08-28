@@ -95,6 +95,7 @@ export class FlowcoreDataPump {
   private nextCursor?: string
   private running = false
   private restartTo?: FlowcoreDataPumpState
+  private processLoopRunning = false
   private abortController?: AbortController
   private buffer: FlowcoreDataPumpBufferItem[] = []
   private bufferState: FlowcoreDataPumpState
@@ -334,6 +335,7 @@ export class FlowcoreDataPump {
 
   private async loop(): Promise<void> {
     do {
+      this.ensureProcessLoop()
       const amountToFetch = this.options.bufferSize - this.buffer.length
 
       if (amountToFetch <= 0) {
@@ -416,6 +418,14 @@ export class FlowcoreDataPump {
         this.bufferState = this.restartTo
         this.restartTo = undefined
         this.running = true
+        // `stop(true)` cleared `running` and stopped the pulse emitter, and the
+        // process loop exits whenever `running` is false. Only `start()` used
+        // to bring them back, so a pump restarted while it was delivering kept
+        // pulling events and never delivered or checkpointed again — it looked
+        // alive from the outside. Both are idempotent, so a loop that merely
+        // parked in `reserve()` is left alone.
+        this.ensureProcessLoop()
+        this.pulseEmitter?.start()
         return this.loop()
       } catch (error) {
         this.logger?.error("Failed to consume restartTo, dropping it", { error })
@@ -602,18 +612,50 @@ export class FlowcoreDataPump {
 
   // #region Pusher
 
+  /**
+   * Guarantee a live process loop whenever the pump is running with a
+   * processor. Called from the fetch loop, so a delivery loop that exited for
+   * any reason — most importantly a restart, which clears `running` while the
+   * loop is mid-batch — comes back within one fetch iteration instead of
+   * leaving a pump that pulls but never delivers.
+   */
+  private ensureProcessLoop(): void {
+    if (!this.options.processor || !this.running || this.processLoopRunning) {
+      return
+    }
+    this.startProcessLoop()
+  }
+
   private startProcessLoop(): void {
-    this.processLoop().catch((error) => {
-      this.logger?.error("Error in processor", { error })
-      if (!this.running) return
-      this.processLoopRestartAttempts++
-      const delay = Math.min(1_000 * Math.pow(2, this.processLoopRestartAttempts - 1), 30_000)
-      this.logger?.warn(`Restarting process loop in ${delay}ms (attempt ${this.processLoopRestartAttempts})`)
-      setTimeout(() => {
+    // Guard against a second loop: `restart()` asks for the loop back, but the
+    // running one may only have been parked in `reserve()`. Two loops would
+    // race over the same buffer.
+    if (this.processLoopRunning) {
+      return
+    }
+    this.processLoopRunning = true
+    this.processLoop()
+      .then(() => {
+        this.processLoopRunning = false
+        // The loop exits as soon as `running` goes false. If the pump is
+        // running again by the time we get here, a restart brought it back
+        // while this loop was finishing its last batch — resume delivery.
+        if (this.running && this.options.processor) {
+          this.startProcessLoop()
+        }
+      })
+      .catch((error) => {
+        this.processLoopRunning = false
+        this.logger?.error("Error in processor", { error })
         if (!this.running) return
-        this.startProcessLoop()
-      }, delay)
-    })
+        this.processLoopRestartAttempts++
+        const delay = Math.min(1_000 * Math.pow(2, this.processLoopRestartAttempts - 1), 30_000)
+        this.logger?.warn(`Restarting process loop in ${delay}ms (attempt ${this.processLoopRestartAttempts})`)
+        setTimeout(() => {
+          if (!this.running) return
+          this.startProcessLoop()
+        }, delay)
+      })
   }
 
   private async processLoop() {
