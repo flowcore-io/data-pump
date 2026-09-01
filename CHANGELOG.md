@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.3](https://github.com/flowcore-io/data-pump/compare/v0.22.2...v0.22.3) (2026-09-01)
+
+
+### Bug Fixes
+
+* restart resumes the process loop and the pulse emitter ([#90](https://github.com/flowcore-io/data-pump/issues/90)) ([6acec00](https://github.com/flowcore-io/data-pump/commit/6acec00e6e90c382168798af99a059d61432f801))
+
+
+### Performance Improvements
+
+* optimize replay buffer metrics and bucket traversal ([#88](https://github.com/flowcore-io/data-pump/issues/88)) ([216ab80](https://github.com/flowcore-io/data-pump/commit/216ab80f8fa64a32769e193f590c972f4b96b2d8))
+
 ## [0.22.2](https://github.com/flowcore-io/data-pump/compare/v0.22.1...v0.22.2) (2026-07-16)
 
 
