@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test"
 import type { EventListOutput, FlowcoreEvent } from "@flowcore/sdk"
+import { TimeUuid } from "@flowcore/time-uuid"
 import { FlowcoreDataPump } from "../../src/data-pump/data-pump.ts"
 import { FlowcoreDataSource } from "../../src/data-pump/data-source.ts"
 import type { FlowcoreDataPumpState, FlowcoreDataPumpStateManager } from "../../src/data-pump/types.ts"
@@ -30,6 +31,22 @@ async function flushMicrotasks() {
   for (let i = 0; i < 10; i++) {
     await Promise.resolve()
   }
+}
+
+async function waitUntil(condition: () => boolean, message: string) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (condition()) return
+    await tickAsync(0)
+  }
+  throw new Error(message)
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver
+  })
+  return { promise, resolve }
 }
 
 function createMockStateManager(): FlowcoreDataPumpStateManager {
@@ -460,6 +477,9 @@ describe("backoff formula", () => {
  * for 26 days (2026-08-02 → 2026-08-28).
  */
 describe("restart resumes the process loop", () => {
+  const firstEventId = TimeUuid.fromDate(new Date("2026-03-31T12:00:00.000Z")).toString()
+  const secondEventId = TimeUuid.fromDate(new Date("2026-03-31T12:00:00.001Z")).toString()
+
   beforeEach(() => {
     jest.useFakeTimers()
   })
@@ -486,10 +506,10 @@ describe("restart resumes the process loop", () => {
     const fakeDataSource = new FakeDataSource({
       getEventsImpl: () => {
         batch++
-        if (batch === 1) return Promise.resolve({ events: [event("evt-1")], nextCursor: undefined })
-        // Keep offering evt-2: restart() clears the buffer, so anything pulled
+        if (batch === 1) return Promise.resolve({ events: [event(firstEventId)], nextCursor: undefined })
+        // Keep offering the second event: restart() clears the buffer, so anything pulled
         // between the restart request and the resume is re-fetched.
-        if (batch <= 6) return Promise.resolve({ events: [event("evt-2")], nextCursor: undefined })
+        if (batch <= 6) return Promise.resolve({ events: [event(secondEventId)], nextCursor: undefined })
         return Promise.resolve({ events: [], nextCursor: undefined })
       },
     })
@@ -511,7 +531,7 @@ describe("restart resumes the process loop", () => {
               delivered.push(e.eventId)
               // Restart from inside the handler: the process loop is mid-batch,
               // so it sees running === false on its next iteration and exits.
-              if (e.eventId === "evt-1") {
+              if (e.eventId === firstEventId) {
                 pump.restart({ timeBucket: "20260331130000" })
               }
             }
@@ -528,28 +548,34 @@ describe("restart resumes the process loop", () => {
 
     void pump.start(() => {})
     await tickAsync(0)
-    assertEquals(delivered[0], "evt-1")
+    assertEquals(delivered[0], firstEventId)
 
     // Let the fetch loop consume restartTo and pull the next batch.
     await tickAsync(1_000)
     await tickAsync(1_000)
 
     // Before the fix the pump kept pulling and delivered nothing more.
-    assert(delivered.includes("evt-2"), `expected evt-2 to be delivered, got ${JSON.stringify(delivered)}`)
+    assert(
+      delivered.includes(secondEventId),
+      `expected the second event to be delivered, got ${JSON.stringify(delivered)}`,
+    )
     assertEquals(pump.isRunning, true)
 
     pump.stop()
     await tickAsync(60_000)
   })
 
-  it("does not start a second process loop when one is only parked", async () => {
+  it("does not let a pre-restart handler checkpoint the replayed event", async () => {
     const { logger } = createMockLogger()
-    const delivered: string[] = []
+    const firstHandler = deferred<void>()
+    const replayHandler = deferred<void>()
+    const checkpoints: FlowcoreDataPumpState[] = []
+    let handlerCalls = 0
     let batch = 0
     const fakeDataSource = new FakeDataSource({
       getEventsImpl: () => {
         batch++
-        if (batch === 1) return Promise.resolve({ events: [event("evt-1")], nextCursor: undefined })
+        if (batch <= 2) return Promise.resolve({ events: [event(firstEventId)], nextCursor: undefined })
         return Promise.resolve({ events: [], nextCursor: undefined })
       },
     })
@@ -563,12 +589,18 @@ describe("restart resumes the process loop", () => {
           flowType: "test.0",
           eventTypes: ["test.created.0"],
         },
-        stateManager: createMockStateManager(),
+        stateManager: {
+          getState: () => ({ timeBucket: "20260331120000" }),
+          setState: (state) => {
+            checkpoints.push(state)
+          },
+        },
+        bufferSize: 1,
         processor: {
           concurrency: 1,
-          handler: (events) => {
-            for (const e of events) delivered.push(e.eventId)
-            return Promise.resolve()
+          handler: () => {
+            handlerCalls++
+            return handlerCalls === 1 ? firstHandler.promise : replayHandler.promise
           },
         },
         notifier: { type: "poller", intervalMs: 60_000 },
@@ -580,17 +612,49 @@ describe("restart resumes the process loop", () => {
     )
 
     void pump.start(() => {})
-    await tickAsync(0)
-    assertEquals(delivered, ["evt-1"])
+    await waitUntil(() => handlerCalls === 1, "initial handler did not start")
 
-    // The loop is parked in reserve(); a restart must not add a second one.
+    // Restart while the old handler owns the event. The source replays the
+    // same event ID into the new buffer before that handler completes.
     pump.restart({ timeBucket: "20260331130000" })
-    await tickAsync(1_000)
-    await tickAsync(1_000)
+    await waitUntil(() => batch === 2 && pump.isRunning, "restart did not refill the buffer")
 
-    // evt-1 is delivered once, not twice.
-    assertEquals(delivered.filter((id) => id === "evt-1").length, 1)
+    firstHandler.resolve()
+    await waitUntil(() => handlerCalls === 2, "replayed event was not delivered by the new process loop")
 
+    // The old handler must not acknowledge the replayed copy. Only the handler
+    // started by the new generation may advance durable state.
+    assertEquals(checkpoints, [])
+    replayHandler.resolve()
+    await waitUntil(() => checkpoints.length === 1, "replayed event was not checkpointed")
+    assertEquals(checkpoints, [{ timeBucket: "20260331120000", eventId: firstEventId }])
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+
+  it("reports a historical restart as replaying until it catches up", async () => {
+    const { logger } = createMockLogger()
+    const fakeDataSource = new FakeDataSource()
+    const pump = createPumpWithFakeDataSource(fakeDataSource, logger)
+
+    void pump.start(() => {})
+    await waitUntil(() => pump.getSnapshot()?.isLive === true, "pump did not reach live state")
+
+    const replayFetch = deferred<EventListOutput>()
+    const callsBeforeRestart = fakeDataSource.getEventsCalls
+    fakeDataSource.setGetEventsImpl(() => replayFetch.promise)
+
+    pump.restart({ timeBucket: "20260331120000" })
+    await waitUntil(
+      () => pump.isRunning && fakeDataSource.getEventsCalls > callsBeforeRestart,
+      "historical replay did not start",
+    )
+
+    assertEquals(pump.getSnapshot()?.isLive, false)
+
+    replayFetch.resolve({ events: [], nextCursor: undefined })
+    await tickAsync(0)
     pump.stop()
     await tickAsync(60_000)
   })

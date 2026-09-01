@@ -96,6 +96,9 @@ export class FlowcoreDataPump {
   private running = false
   private restartTo?: FlowcoreDataPumpState
   private processLoopRunning = false
+  // Invalidates delivery work that crossed a stop/restart boundary. Event IDs
+  // can reappear during replay, so `running` alone cannot identify the owner.
+  private processLoopGeneration = 0
   private abortController?: AbortController
   private buffer: FlowcoreDataPumpBufferItem[] = []
   private bufferState: FlowcoreDataPumpState
@@ -301,11 +304,13 @@ export class FlowcoreDataPump {
     if (stopAt !== undefined) {
       this.options.stopAt = stopAt ?? undefined
     }
+    this.isLive = false
     this.stop(true)
   }
 
-  public stop(isRestart = false): void {
+  public stop(_isRestart = false): void {
     this.running = false
+    this.processLoopGeneration++
     this.processLoopRestartAttempts = 0
     this.mainLoopRestartAttempts = 0
     this.buffer = []
@@ -314,9 +319,7 @@ export class FlowcoreDataPump {
     this.pulseEmitter?.stop()
     this.abortController?.abort()
     this.waiterBufferThreshold?.()
-    if (!isRestart) {
-      this.waiterEvents?.()
-    }
+    this.waiterEvents?.()
   }
 
   private updateState(eventId?: string): Promise<void> | void {
@@ -422,8 +425,8 @@ export class FlowcoreDataPump {
         // process loop exits whenever `running` is false. Only `start()` used
         // to bring them back, so a pump restarted while it was delivering kept
         // pulling events and never delivered or checkpointed again — it looked
-        // alive from the outside. Both are idempotent, so a loop that merely
-        // parked in `reserve()` is left alone.
+        // alive from the outside. The old loop exits through its generation
+        // guard before a replacement takes ownership.
         this.ensureProcessLoop()
         this.pulseEmitter?.start()
         return this.loop()
@@ -439,8 +442,12 @@ export class FlowcoreDataPump {
 
   // #region Puller
 
-  public async reserve(amount: number): Promise<FlowcoreEvent[]> {
-    if (!this.running) {
+  public reserve(amount: number): Promise<FlowcoreEvent[]> {
+    return this.reserveInternal(amount)
+  }
+
+  private async reserveInternal(amount: number, generation?: number): Promise<FlowcoreEvent[]> {
+    if (!this.running || (generation !== undefined && generation !== this.processLoopGeneration)) {
       return []
     }
     const events: FlowcoreEvent[] = []
@@ -463,7 +470,7 @@ export class FlowcoreDataPump {
 
     if (!events.length) {
       await this.waitForEvents()
-      return this.reserve(amount)
+      return this.reserveInternal(amount, generation)
     }
 
     this.updateMetricsGauges()
@@ -633,8 +640,9 @@ export class FlowcoreDataPump {
     if (this.processLoopRunning) {
       return
     }
+    const generation = this.processLoopGeneration
     this.processLoopRunning = true
-    this.processLoop()
+    this.processLoop(generation)
       .then(() => {
         this.processLoopRunning = false
         // The loop exits as soon as `running` goes false. If the pump is
@@ -647,24 +655,30 @@ export class FlowcoreDataPump {
       .catch((error) => {
         this.processLoopRunning = false
         this.logger?.error("Error in processor", { error })
-        if (!this.running) return
+        if (!this.isCurrentProcessLoop(generation)) return
         this.processLoopRestartAttempts++
         const delay = Math.min(1_000 * Math.pow(2, this.processLoopRestartAttempts - 1), 30_000)
         this.logger?.warn(`Restarting process loop in ${delay}ms (attempt ${this.processLoopRestartAttempts})`)
         setTimeout(() => {
-          if (!this.running) return
+          if (!this.isCurrentProcessLoop(generation)) return
           this.startProcessLoop()
         }, delay)
       })
   }
 
-  private async processLoop() {
-    while (this.running) {
+  private isCurrentProcessLoop(generation: number): boolean {
+    return this.running && generation === this.processLoopGeneration
+  }
+
+  private async processLoop(generation: number) {
+    while (this.isCurrentProcessLoop(generation)) {
       try {
-        const events = await this.reserve(this.options.processor?.concurrency ?? 1)
+        const events = await this.reserveInternal(this.options.processor?.concurrency ?? 1, generation)
+        if (!this.isCurrentProcessLoop(generation)) return
         await this.replayObserver.observeHandler(events, async () => {
           await this.options.processor?.handler(events)
         })
+        if (!this.isCurrentProcessLoop(generation)) return
         await this.acknowledge(events.map((event) => event.eventId))
         this.processLoopRestartAttempts = 0
       } catch (error) {
