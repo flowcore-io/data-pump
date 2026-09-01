@@ -95,10 +95,12 @@ export class FlowcoreDataPump {
   private nextCursor?: string
   private running = false
   private restartTo?: FlowcoreDataPumpState
-  private processLoopRunning = false
   // Invalidates delivery work that crossed a stop/restart boundary. Event IDs
   // can reappear during replay, so `running` alone cannot identify the owner.
   private processLoopGeneration = 0
+  private activeProcessLoopGeneration?: number
+  private processLoopBackoffGeneration?: number
+  private processLoopRestartTimer?: ReturnType<typeof setTimeout>
   private abortController?: AbortController
   private buffer: FlowcoreDataPumpBufferItem[] = []
   private bufferState: FlowcoreDataPumpState
@@ -308,9 +310,15 @@ export class FlowcoreDataPump {
     this.stop(true)
   }
 
-  public stop(_isRestart = false): void {
+  public stop(isRestart = false): void {
     this.running = false
     this.processLoopGeneration++
+    this.activeProcessLoopGeneration = undefined
+    this.processLoopBackoffGeneration = undefined
+    if (this.processLoopRestartTimer) {
+      clearTimeout(this.processLoopRestartTimer)
+      this.processLoopRestartTimer = undefined
+    }
     this.processLoopRestartAttempts = 0
     this.mainLoopRestartAttempts = 0
     this.buffer = []
@@ -319,7 +327,7 @@ export class FlowcoreDataPump {
     this.pulseEmitter?.stop()
     this.abortController?.abort()
     this.waiterBufferThreshold?.()
-    this.waiterEvents?.()
+    this.notifyEventWaiters(!isRestart)
   }
 
   private updateState(eventId?: string): Promise<void> | void {
@@ -371,7 +379,7 @@ export class FlowcoreDataPump {
       this.nextCursor = nextCursor
       this.updateMetricsGauges()
 
-      events.length && this.waiterEvents?.()
+      events.length && this.notifyEventWaiters()
 
       this.bufferState.eventId = events[events.length - 1]?.eventId ?? this.bufferState.eventId
 
@@ -433,6 +441,7 @@ export class FlowcoreDataPump {
       } catch (error) {
         this.logger?.error("Failed to consume restartTo, dropping it", { error })
         this.restartTo = undefined
+        this.notifyEventWaiters()
         return
       }
     }
@@ -469,7 +478,7 @@ export class FlowcoreDataPump {
     }
 
     if (!events.length) {
-      await this.waitForEvents()
+      await this.waitForEvents(generation)
       return this.reserveInternal(amount, generation)
     }
 
@@ -585,7 +594,7 @@ export class FlowcoreDataPump {
 
     if (reopenedEvents.length) {
       this.logger?.info(`Reopened ${reopenedEvents.length} events`)
-      await this.waiterEvents?.()
+      this.notifyEventWaiters()
     }
 
     if (!failedEvents.length) {
@@ -627,39 +636,52 @@ export class FlowcoreDataPump {
    * leaving a pump that pulls but never delivers.
    */
   private ensureProcessLoop(): void {
-    if (!this.options.processor || !this.running || this.processLoopRunning) {
+    if (
+      !this.options.processor ||
+      !this.running ||
+      this.activeProcessLoopGeneration === this.processLoopGeneration ||
+      this.processLoopBackoffGeneration === this.processLoopGeneration
+    ) {
       return
     }
     this.startProcessLoop()
   }
 
   private startProcessLoop(): void {
-    // Guard against a second loop: `restart()` asks for the loop back, but the
-    // running one may only have been parked in `reserve()`. Two loops would
-    // race over the same buffer.
-    if (this.processLoopRunning) {
+    const generation = this.processLoopGeneration
+    if (
+      !this.options.processor ||
+      !this.isCurrentProcessLoop(generation) ||
+      this.activeProcessLoopGeneration === generation ||
+      this.processLoopBackoffGeneration === generation
+    ) {
       return
     }
-    const generation = this.processLoopGeneration
-    this.processLoopRunning = true
+    this.activeProcessLoopGeneration = generation
     this.processLoop(generation)
       .then(() => {
-        this.processLoopRunning = false
+        if (this.activeProcessLoopGeneration !== generation) return
+        this.activeProcessLoopGeneration = undefined
         // The loop exits as soon as `running` goes false. If the pump is
         // running again by the time we get here, a restart brought it back
         // while this loop was finishing its last batch — resume delivery.
-        if (this.running && this.options.processor) {
+        if (this.isCurrentProcessLoop(generation)) {
           this.startProcessLoop()
         }
       })
       .catch((error) => {
-        this.processLoopRunning = false
+        if (this.activeProcessLoopGeneration !== generation) return
+        this.activeProcessLoopGeneration = undefined
         this.logger?.error("Error in processor", { error })
         if (!this.isCurrentProcessLoop(generation)) return
         this.processLoopRestartAttempts++
         const delay = Math.min(1_000 * Math.pow(2, this.processLoopRestartAttempts - 1), 30_000)
         this.logger?.warn(`Restarting process loop in ${delay}ms (attempt ${this.processLoopRestartAttempts})`)
-        setTimeout(() => {
+        this.processLoopBackoffGeneration = generation
+        this.processLoopRestartTimer = setTimeout(() => {
+          if (this.processLoopBackoffGeneration !== generation) return
+          this.processLoopBackoffGeneration = undefined
+          this.processLoopRestartTimer = undefined
           if (!this.isCurrentProcessLoop(generation)) return
           this.startProcessLoop()
         }, delay)
@@ -807,10 +829,27 @@ export class FlowcoreDataPump {
 
   // #region Waiters
 
-  private waiterEvents?: () => void
-  private async waitForEvents() {
+  private publicEventWaiter?: () => void
+  private readonly processEventWaiters = new Map<number, () => void>()
+
+  private notifyEventWaiters(includePublic = true): void {
+    if (includePublic) {
+      const publicWaiter = this.publicEventWaiter
+      this.publicEventWaiter = undefined
+      publicWaiter?.()
+    }
+    const processWaiters = [...this.processEventWaiters.values()]
+    this.processEventWaiters.clear()
+    for (const waiter of processWaiters) waiter()
+  }
+
+  private async waitForEvents(generation?: number) {
     const promise = new Promise<void>((resolve) => {
-      this.waiterEvents = resolve
+      if (generation === undefined) {
+        this.publicEventWaiter = resolve
+      } else {
+        this.processEventWaiters.set(generation, resolve)
+      }
     })
     await this.replayObserver.observeIdle("waiting_for_events", () => promise)
   }

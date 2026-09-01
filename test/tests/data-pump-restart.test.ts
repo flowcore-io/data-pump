@@ -128,12 +128,14 @@ describe("processLoop restart", () => {
 interface FakeDataSourceOptions {
   timeBuckets?: string[]
   getEventsImpl?: () => Promise<EventListOutput>
+  getTimeBucketsImpl?: () => Promise<string[]>
 }
 
 class FakeDataSource extends FlowcoreDataSource {
   public getEventsCalls = 0
   private readonly timeBucketsValue: string[]
   private getEventsImpl: () => Promise<EventListOutput>
+  private readonly getTimeBucketsImpl?: () => Promise<string[]>
 
   constructor(opts: FakeDataSourceOptions = {}) {
     super({
@@ -149,10 +151,11 @@ class FakeDataSource extends FlowcoreDataSource {
     })
     this.timeBucketsValue = opts.timeBuckets ?? ["20260331120000", "20260331130000"]
     this.getEventsImpl = opts.getEventsImpl ?? (() => Promise.resolve({ events: [], nextCursor: undefined }))
+    this.getTimeBucketsImpl = opts.getTimeBucketsImpl
   }
 
   public override getTimeBuckets(_force = false): Promise<string[]> {
-    return Promise.resolve(this.timeBucketsValue)
+    return this.getTimeBucketsImpl?.() ?? Promise.resolve(this.timeBucketsValue)
   }
 
   public override getClosestTimeBucket(timeBucket: string, getBefore = false): Promise<string | null> {
@@ -216,6 +219,88 @@ function createPumpWithFakeDataSource(
 }
 
 // #endregion
+
+describe("process-loop ownership", () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  function createOwnedLoopPump(fakeDataSource: FakeDataSource): FlowcoreDataPump {
+    return FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: {
+          tenant: "test",
+          dataCore: "test-dc",
+          flowType: "test.0",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager: createMockStateManager(),
+        processor: { handler: () => Promise.resolve() },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+      },
+      fakeDataSource,
+    )
+  }
+
+  it("starts at most one process loop for a generation", async () => {
+    const loop = deferred<void>()
+    const pump = createOwnedLoopPump(new FakeDataSource())
+    let processLoopCalls = 0
+    const internals = pump as unknown as {
+      processLoop: (generation: number) => Promise<void>
+      ensureProcessLoop: () => void
+    }
+    internals.processLoop = () => {
+      processLoopCalls++
+      return loop.promise
+    }
+
+    void pump.start(() => {})
+    await waitUntil(() => processLoopCalls === 1, "process loop did not start")
+    internals.ensureProcessLoop()
+    internals.ensureProcessLoop()
+    internals.ensureProcessLoop()
+    assertEquals(processLoopCalls, 1)
+
+    pump.stop()
+    loop.resolve()
+    await tickAsync(60_000)
+    assertEquals(processLoopCalls, 1)
+  })
+
+  it("does not bypass process-loop retry backoff", async () => {
+    const pump = createOwnedLoopPump(new FakeDataSource())
+    let processLoopCalls = 0
+    const internals = pump as unknown as {
+      processLoop: (generation: number) => Promise<void>
+      ensureProcessLoop: () => void
+    }
+    internals.processLoop = () => {
+      processLoopCalls++
+      return Promise.reject(new Error("outer process-loop failure"))
+    }
+
+    void pump.start(() => {})
+    await waitUntil(() => processLoopCalls === 1, "process loop did not start")
+    await tickAsync(0)
+    internals.ensureProcessLoop()
+    internals.ensureProcessLoop()
+    assertEquals(processLoopCalls, 1)
+
+    await tickAsync(1_000)
+    assertEquals(processLoopCalls, 2)
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+})
 
 describe("startMainLoop self-heal", () => {
   beforeEach(() => {
@@ -628,6 +713,121 @@ describe("restart resumes the process loop", () => {
     replayHandler.resolve()
     await waitUntil(() => checkpoints.length === 1, "replayed event was not checkpointed")
     assertEquals(checkpoints, [{ timeBucket: "20260331120000", eventId: firstEventId }])
+
+    pump.stop()
+    await tickAsync(60_000)
+  })
+
+  it("keeps the documented pull consumer parked across restart", async () => {
+    const { logger } = createMockLogger()
+    const restartCatalog = deferred<string[]>()
+    let serveReplay = false
+    const fakeDataSource = new FakeDataSource({
+      getTimeBucketsImpl: () => restartCatalog.promise,
+      getEventsImpl: () =>
+        Promise.resolve({
+          events: serveReplay ? [event(secondEventId)] : [],
+          nextCursor: undefined,
+        }),
+    })
+    const pump = createPumpWithFakeDataSource(fakeDataSource, logger)
+    const delivered: string[] = []
+    let consumerStarted = false
+    let consumerExited = false
+
+    void pump.start(() => {})
+    await waitUntil(() => pump.isRunning, "pump did not start")
+    void (async () => {
+      consumerStarted = true
+      while (pump.isRunning) {
+        const events = await pump.reserve(1)
+        delivered.push(...events.map((item) => item.eventId))
+        await pump.acknowledge(events.map((item) => item.eventId))
+      }
+      consumerExited = true
+    })()
+    await waitUntil(() => consumerStarted, "pull consumer did not start")
+    await tickAsync(0)
+
+    pump.restart({ timeBucket: "20260331130000" })
+    await tickAsync(0)
+
+    assertEquals(consumerExited, false, "restart must not end a public reserve loop")
+    assertEquals(delivered, [])
+
+    serveReplay = true
+    restartCatalog.resolve(["20260331120000", "20260331130000"])
+    await waitUntil(() => delivered.includes(secondEventId), "pull consumer did not receive replayed event")
+    assertEquals(consumerExited, false)
+
+    pump.stop()
+    await waitUntil(() => consumerExited, "pull consumer did not exit after stop")
+    await tickAsync(60_000)
+  })
+
+  it("starts a new process generation while an old handler is stuck", async () => {
+    const { logger } = createMockLogger()
+    const firstHandler = deferred<void>()
+    const secondHandler = deferred<void>()
+    const checkpoints: FlowcoreDataPumpState[] = []
+    let handlerCalls = 0
+    let fetchCalls = 0
+    const fakeDataSource = new FakeDataSource({
+      getEventsImpl: () => {
+        fetchCalls++
+        return Promise.resolve({
+          events: fetchCalls <= 2 ? [event(fetchCalls === 1 ? firstEventId : secondEventId)] : [],
+          nextCursor: undefined,
+        })
+      },
+    })
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: {
+          tenant: "test",
+          dataCore: "test-dc",
+          flowType: "test.0",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager: {
+          getState: () => ({ timeBucket: "20260331120000" }),
+          setState: (state) => {
+            checkpoints.push(state)
+          },
+        },
+        bufferSize: 1,
+        processor: {
+          concurrency: 1,
+          handler: () => {
+            handlerCalls++
+            return handlerCalls === 1 ? firstHandler.promise : secondHandler.promise
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        logger,
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+      },
+      fakeDataSource,
+    )
+
+    void pump.start(() => {})
+    await waitUntil(() => handlerCalls === 1, "initial handler did not start")
+
+    pump.stop()
+    void pump.start(() => {})
+    await waitUntil(() => fetchCalls >= 2 && pump.isRunning, "pump did not refill after start")
+    await waitUntil(() => handlerCalls === 2, "new process generation stayed blocked by old handler")
+    assertEquals(checkpoints, [])
+
+    firstHandler.resolve()
+    await tickAsync(0)
+    assertEquals(checkpoints, [], "stale handler must not checkpoint the new buffer")
+
+    secondHandler.resolve()
+    await waitUntil(() => checkpoints.length === 1, "current handler did not checkpoint")
+    assertEquals(checkpoints, [{ timeBucket: "20260331120000", eventId: secondEventId }])
 
     pump.stop()
     await tickAsync(60_000)
