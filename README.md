@@ -814,6 +814,16 @@ While paused:
 Both calls are idempotent. The pause flag is sticky across `restart()` and `stop()`/`start()`, so a repositioned or
 bounced pump stays paused until `resume()` is called.
 
+To restore a pause that you store somewhere durable, pass it at construction rather than calling `pause()` after
+`start()`. The pump would otherwise deliver events in the gap between the two calls:
+
+```typescript
+const dataPump = FlowcoreDataPump.create({
+  // ...
+  paused: await myStore.isPaused(), // born paused, nothing escapes on the way up
+})
+```
+
 Two limits to know:
 
 - A paused pump holds up to `bufferSize` events in memory.
@@ -822,7 +832,8 @@ Two limits to know:
 
 In cluster mode, call `pause()` and `resume()` on the `FlowcoreDataPumpCluster`, not on the pump. The flag is held on
 the cluster and re-applied to the pump each new leader builds, so a failover does not silently resume delivery. The
-flag is in memory only — persist it in your coordinator or control plane if it must survive a rolling deploy.
+flag is in memory only — persist it in your coordinator or control plane and pass it back through the `paused` option
+if it must survive a rolling deploy.
 
 Restart clears the current buffer and refreshes available time buckets. In 0.22.x, the optional
 `restart(state, stopAt)` argument updates the option but does not rebuild the internal stop boundary. Create a new pump

@@ -295,6 +295,43 @@ describe("data pump pause / resume", () => {
     pump.stop()
   })
 
+  it("can be constructed already paused so no event escapes before the pause applies", async () => {
+    const delivered: number[] = []
+    const state = new RecordingStateManager()
+    const source = new FakeDataSource([makeEvent(0), makeEvent(1), makeEvent(2)])
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: FAKE_API_KEY },
+        dataSource: { tenant: "test", dataCore: "test-dc", flowType: "test.0", eventTypes: ["test.created.0"] },
+        stateManager: state,
+        processor: {
+          concurrency: 1,
+          handler: async (events: FlowcoreEvent[]) => {
+            for (const event of events) delivered.push((event.payload as { index: number }).index)
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        paused: true,
+        baseUrlOverride: "http://localhost:9999",
+        noTranslation: true,
+      },
+      source,
+    )
+
+    void pump.start(() => {})
+    await tickAsync(60_000)
+
+    // Restoring a durable pause must not leak a single delivery on the way up.
+    expect(pump.isPaused).toBe(true)
+    expect(delivered).toEqual([])
+    expect(pump.getSnapshot()!.bufferDepth).toBe(3)
+
+    pump.resume()
+    await waitUntil(() => delivered.length === 3, "resume did not start delivery")
+    expect(delivered).toEqual([0, 1, 2])
+    pump.stop()
+  })
+
   it("refuses to pause a pump with no processor, so the pulse never claims a false pause", async () => {
     const state = new RecordingStateManager()
     const warnings: string[] = []

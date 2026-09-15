@@ -51,7 +51,7 @@ export class FlowcoreDataPumpCluster {
   // Delivery pause held on the CLUSTER, not on the pump. A leader change destroys the
   // pump instance and builds a new one, so a pause stored on the pump would silently
   // evaporate on failover and delivery would resume with no operator action.
-  private paused = false
+  private paused: boolean
   private pump?: FlowcoreDataPump
   private leaderConnection?: WsConnection
 
@@ -88,6 +88,7 @@ export class FlowcoreDataPumpCluster {
     this.leaseRenewIntervalMs = options.leaseRenewIntervalMs ?? DEFAULT_LEASE_RENEW_INTERVAL_MS
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS
     this.workerConcurrency = options.workerConcurrency ?? DEFAULT_WORKER_CONCURRENCY
+    this.paused = options.paused ?? false
     this.logger = options.logger
 
     // capture user's processor for worker mode
@@ -407,6 +408,10 @@ export class FlowcoreDataPumpCluster {
     // create pump with distribution processor that sends events to workers
     const pumpOptions: FlowcoreDataPumpOptions = {
       ...this.options,
+      // Build the pump already paused. Pausing it after `start()` would let the new
+      // leader deliver events in the gap, which is exactly what the operator asked
+      // us not to do.
+      paused: this.paused,
       processor: {
         concurrency: this.workerConcurrency,
         handler: async (events: FlowcoreEvent[]) => {
@@ -418,10 +423,7 @@ export class FlowcoreDataPumpCluster {
     }
 
     this.pump = FlowcoreDataPump.create(pumpOptions, this.options.dataSourceOverride)
-    // Re-apply the cluster-level pause to the freshly built pump, so a failover or a
-    // leader restart does not resume delivery behind the operator's back.
     if (this.paused) {
-      this.pump.pause()
       this.logger?.info("Leader pump started paused", { instanceId: this.instanceId })
     }
     this.pump.start().catch((error) => {
