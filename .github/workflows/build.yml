@@ -3,6 +3,11 @@ name: Build and Publish to npm
 on:
   release:
     types: [published]
+  # Manual re-publish. A failed publish cannot be recovered with `gh run rerun`,
+  # because a rerun replays the workflow file from the tagged commit — including
+  # whatever broke it. Dispatching from a branch uses the current file and the
+  # version in that branch's package.json.
+  workflow_dispatch:
 
 permissions:
   id-token: write
