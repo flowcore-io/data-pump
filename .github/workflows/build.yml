@@ -38,11 +38,24 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Lint
         run: bun run lint
+      - name: Test
+        run: bun test
       - name: Build for NPM
         run: bun run build
-      - uses: actions/setup-node@v4
+      # useblacksmith/setup-node, NOT actions/setup-node. The Blacksmith action injects a
+      # transient npm token through OIDC. actions/setup-node does not, so it falls back to
+      # NODE_AUTH_TOKEN — a classic token, and npm revoked those in March 2025. The symptom
+      # is `E404 Not Found - PUT` on a package that plainly exists, because npm answers 404
+      # rather than 403 to avoid leaking package existence.
+      - uses: useblacksmith/setup-node@v5
         with:
-          node-version: "22.x"
+          node-version: "24.x"
           registry-url: "https://registry.npmjs.org"
+      # Pinned, not @latest. A floating npm broke this pipeline once already when npm 12
+      # raised its own engine requirement above the node version in use.
+      - name: Install npm 11
+        run: npm install -g npm@11
+      # provenance stays off: Blacksmith counts as a self-hosted runner, and npm only
+      # supports provenance from GitHub-hosted runners.
       - name: Publish to NPM
         run: npm publish --access public --provenance=false
