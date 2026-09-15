@@ -51,6 +51,14 @@ export interface FlowcoreDataPumpOptions {
   notifier?: FlowcoreDataPumpNotifierOptions
   logger?: FlowcoreLogger
   stopAt?: Date
+  /**
+   * Start the pump with delivery already paused.
+   *
+   * Use this to restore a pause that is stored somewhere durable. Calling `pause()`
+   * after `start()` would let the pump deliver events in the gap between the two.
+   * Ignored when no `processor` is configured, for the same reason as {@link FlowcoreDataPump.pause}.
+   */
+  paused?: boolean
   baseUrlOverride?: string
   noTranslation?: boolean
   directMode?: boolean
@@ -219,6 +227,12 @@ export class FlowcoreDataPump {
       },
       options.logger,
     )
+
+    // Restore a durable pause BEFORE start(), so no event is delivered in the gap
+    // between construction and a post-start `pause()` call.
+    if (options.paused && options.processor) {
+      pump.paused = true
+    }
 
     if (options.pulse) {
       const pathwayId = options.pulse.pathwayId

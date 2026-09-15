@@ -60,10 +60,14 @@ function createFakePump() {
 }
 
 describe("cluster pause survives a leader change", () => {
-  it("re-applies the pause to the pump a new leader builds", () => {
+  it("builds the new leader's pump already paused", () => {
     const cluster = createCluster()
     const first = createFakePump()
-    const spy = jest.spyOn(FlowcoreDataPump, "create").mockReturnValue(first.pump)
+    const createdWith: Array<{ paused?: boolean }> = []
+    const spy = jest.spyOn(FlowcoreDataPump, "create").mockImplementation((options) => {
+      createdWith.push(options as { paused?: boolean })
+      return first.pump
+    })
 
     try {
       const internals = cluster as unknown as { startPumpAsLeader(): void }
@@ -71,7 +75,7 @@ describe("cluster pause survives a leader change", () => {
       // This instance becomes leader and starts delivering.
       internals.startPumpAsLeader()
       expect(first.calls.start).toBe(1)
-      expect(first.calls.pause).toBe(0)
+      expect(createdWith[0]?.paused).toBe(false)
 
       // An operator pauses the pathway.
       cluster.pause()
@@ -81,11 +85,17 @@ describe("cluster pause survives a leader change", () => {
       // The lease is lost and a new leader builds a BRAND NEW pump. Without the
       // cluster-level flag this pump would start delivering at full rate with no
       // operator action and no log line saying the pause was dropped.
+      //
+      // It must be born paused, not paused a tick after start() — otherwise the new
+      // leader delivers events in the gap between the two calls.
       const second = createFakePump()
-      spy.mockReturnValue(second.pump)
+      spy.mockImplementation((options) => {
+        createdWith.push(options as { paused?: boolean })
+        return second.pump
+      })
       internals.startPumpAsLeader()
 
-      expect(second.calls.pause).toBe(1)
+      expect(createdWith[1]?.paused).toBe(true)
       expect(second.calls.start).toBe(1)
       expect(cluster.isPaused).toBe(true)
     } finally {
@@ -96,7 +106,11 @@ describe("cluster pause survives a leader change", () => {
   it("resume clears the flag so a later leader starts unpaused", () => {
     const cluster = createCluster()
     const first = createFakePump()
-    const spy = jest.spyOn(FlowcoreDataPump, "create").mockReturnValue(first.pump)
+    const createdWith: Array<{ paused?: boolean }> = []
+    const spy = jest.spyOn(FlowcoreDataPump, "create").mockImplementation((options) => {
+      createdWith.push(options as { paused?: boolean })
+      return first.pump
+    })
 
     try {
       const internals = cluster as unknown as { startPumpAsLeader(): void }
@@ -106,12 +120,27 @@ describe("cluster pause survives a leader change", () => {
       expect(cluster.isPaused).toBe(false)
       expect(first.calls.resume).toBe(1)
 
-      const second = createFakePump()
-      spy.mockReturnValue(second.pump)
+      spy.mockImplementation((options) => {
+        createdWith.push(options as { paused?: boolean })
+        return createFakePump().pump
+      })
       internals.startPumpAsLeader()
-      expect(second.calls.pause).toBe(0)
+      expect(createdWith[1]?.paused).toBe(false)
     } finally {
       spy.mockRestore()
     }
+  })
+
+  it("honours a paused flag supplied in the cluster options", () => {
+    const cluster = new FlowcoreDataPumpCluster({
+      auth: { getBearerToken: () => Promise.resolve("fake") },
+      dataSource: { tenant: "test", dataCore: "dc", flowType: "ft", eventTypes: ["ev"] },
+      stateManager: { getState: () => null },
+      coordinator: new NoopCoordinator(),
+      advertisedAddress: "ws://localhost:8080",
+      notifier: { type: "poller", intervalMs: 60_000 },
+      paused: true,
+    })
+    expect(cluster.isPaused).toBe(true)
   })
 })
