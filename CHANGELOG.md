@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.0](https://github.com/flowcore-io/data-pump/compare/v0.22.3...v0.23.0) (2026-09-15)
+
+
+### Features
+
+* **pump:** add pause and resume for delivery ([#91](https://github.com/flowcore-io/data-pump/issues/91)) ([e9c6904](https://github.com/flowcore-io/data-pump/commit/e9c69043d6dfb52588b125c53c720ee8033d263c))
+* **pump:** allow a pump to be constructed already paused ([#93](https://github.com/flowcore-io/data-pump/issues/93)) ([221925a](https://github.com/flowcore-io/data-pump/commit/221925a1844e1a7f6374797cd3b0a48fb3919d2e))
+
 ## [0.22.3](https://github.com/flowcore-io/data-pump/compare/v0.22.2...v0.22.3) (2026-09-01)
 
 
