@@ -790,6 +790,40 @@ dataPump.restart({
 })
 ```
 
+#### Pause and Resume Delivery
+
+`pause()` stops delivery to the processor without stopping the pump. Use it to hold events back while a downstream
+system is repaired, then continue exactly where you left off.
+
+```typescript
+dataPump.pause()
+console.log(dataPump.isPaused) // true
+
+// ... repair the downstream system ...
+
+dataPump.resume() // delivery continues from the same position
+```
+
+While paused:
+
+- The fetch loop keeps running and fills the buffer to `bufferSize`, then applies normal backpressure.
+- The buffer and the cursor are retained. Nothing is lost and nothing is skipped.
+- The pulse emitter keeps reporting, with `paused: true`, so the control plane still sees a live pump.
+- A batch already inside the handler finishes and acknowledges, so the checkpoint stays accurate.
+
+Both calls are idempotent. The pause flag is sticky across `restart()` and `stop()`/`start()`, so a repositioned or
+bounced pump stays paused until `resume()` is called.
+
+Two limits to know:
+
+- A paused pump holds up to `bufferSize` events in memory.
+- `pause()` only governs the processor. It is ignored on a pump created without one, and it logs a warning, because
+  `reserve()` in pull mode would still hand out events and the `paused` pulse flag would be a false claim.
+
+In cluster mode, call `pause()` and `resume()` on the `FlowcoreDataPumpCluster`, not on the pump. The flag is held on
+the cluster and re-applied to the pump each new leader builds, so a failover does not silently resume delivery. The
+flag is in memory only — persist it in your coordinator or control plane if it must survive a rolling deploy.
+
 Restart clears the current buffer and refreshes available time buckets. In 0.22.x, the optional
 `restart(state, stopAt)` argument updates the option but does not rebuild the internal stop boundary. Create a new pump
 when changing `stopAt`.

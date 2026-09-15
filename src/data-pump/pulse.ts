@@ -25,6 +25,8 @@ export interface PulseSnapshot {
   timeBucket: string
   eventId: string | undefined
   isLive: boolean
+  /** Delivery to the processor is paused. The pump is still fetching and alive. */
+  paused: boolean
   bufferDepth: number
   bufferReserved: number
   bufferSizeBytes: number
@@ -105,6 +107,9 @@ export class PulseEmitter {
       timeBucket: snapshot.timeBucket,
       eventId: snapshot.eventId ?? null,
       isLive: snapshot.isLive,
+      // Same widening as `sourceId` above: the CP accepts `paused`, the pinned sdk
+      // type does not declare it yet. The cast below absorbs it.
+      paused: snapshot.paused,
       buffer: {
         depth: snapshot.bufferDepth,
         reserved: snapshot.bufferReserved,

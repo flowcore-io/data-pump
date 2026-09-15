@@ -48,6 +48,10 @@ export class FlowcoreDataPumpCluster {
 
   private running = false
   private isLeader = false
+  // Delivery pause held on the CLUSTER, not on the pump. A leader change destroys the
+  // pump instance and builds a new one, so a pause stored on the pump would silently
+  // evaporate on failover and delivery would resume with no operator action.
+  private paused = false
   private pump?: FlowcoreDataPump
   private leaderConnection?: WsConnection
 
@@ -198,6 +202,36 @@ export class FlowcoreDataPumpCluster {
 
     // Start leader election loop
     this.startElectionLoop()
+  }
+
+  /**
+   * Whether delivery is paused across the cluster.
+   * The flag lives on the cluster, so it survives a leader change.
+   */
+  get isPaused(): boolean {
+    return this.paused
+  }
+
+  /**
+   * Pause delivery. A leader applies it to its pump immediately. A follower records it,
+   * so the pause is re-applied if this instance later becomes leader.
+   *
+   * The flag is in-memory. It does NOT survive a process restart or a full rolling
+   * deploy — persist it in the coordinator or the control plane if you need that.
+   */
+  pause(): void {
+    if (this.paused) return
+    this.paused = true
+    this.pump?.pause()
+    this.logger?.info("Cluster delivery paused", { instanceId: this.instanceId, isLeader: this.isLeader })
+  }
+
+  /** Resume delivery from the position where {@link pause} stopped it. */
+  resume(): void {
+    if (!this.paused) return
+    this.paused = false
+    this.pump?.resume()
+    this.logger?.info("Cluster delivery resumed", { instanceId: this.instanceId, isLeader: this.isLeader })
   }
 
   async stop(): Promise<void> {
@@ -384,6 +418,12 @@ export class FlowcoreDataPumpCluster {
     }
 
     this.pump = FlowcoreDataPump.create(pumpOptions, this.options.dataSourceOverride)
+    // Re-apply the cluster-level pause to the freshly built pump, so a failover or a
+    // leader restart does not resume delivery behind the operator's back.
+    if (this.paused) {
+      this.pump.pause()
+      this.logger?.info("Leader pump started paused", { instanceId: this.instanceId })
+    }
     this.pump.start().catch((error) => {
       this.logger?.error("Pump error in leader mode", { error })
       if (!this.running || !this.isLeader) return

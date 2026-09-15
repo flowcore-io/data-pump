@@ -94,6 +94,11 @@ interface FlowcoreDataPumpBufferStats {
 export class FlowcoreDataPump {
   private nextCursor?: string
   private running = false
+  // Delivery pause. Independent of `running`: a paused pump keeps fetching, keeps its
+  // buffer, keeps its cursor and keeps emitting pulses — it only stops handing events
+  // to the processor. The flag is sticky across `restart()` and `stop()`/`start()`, so
+  // a repositioned or bounced pump stays paused until `resume()` is called.
+  private paused = false
   private restartTo?: FlowcoreDataPumpState
   // Invalidates delivery work that crossed a stop/restart boundary. Event IDs
   // can reappear during replay, so `running` alone cannot identify the owner.
@@ -141,6 +146,14 @@ export class FlowcoreDataPump {
     }
   }
 
+  /**
+   * Whether delivery to the processor is currently paused.
+   * A paused pump is still running: it fetches, buffers and pulses.
+   */
+  public get isPaused(): boolean {
+    return this.paused
+  }
+
   public get isRunning(): boolean {
     return this.running
   }
@@ -153,6 +166,7 @@ export class FlowcoreDataPump {
       timeBucket: this.bufferState.timeBucket,
       eventId: this.bufferState.eventId,
       isLive: this.isLive,
+      paused: this.paused,
       bufferDepth: this.buffer.length,
       bufferReserved: this.bufferReservedCount,
       bufferSizeBytes: this.bufferSizeBytes,
@@ -310,6 +324,53 @@ export class FlowcoreDataPump {
     this.stop(true)
   }
 
+  /**
+   * Pause delivery to the processor.
+   *
+   * The fetch loop keeps running and tops the buffer up to `bufferSize`, then blocks on
+   * normal backpressure. The buffer, the cursor and the pulse emitter are untouched, so
+   * the control plane still sees a live pump. An in-flight batch finishes its handler
+   * and acknowledges, so the checkpoint stays accurate and nothing is redelivered
+   * needlessly.
+   *
+   * Idempotent. A paused pump holds up to `bufferSize` events in memory.
+   */
+  public pause(): void {
+    if (!this.options.processor) {
+      // Pause governs the processor. A puller-mode pump has none, so reporting
+      // `paused: true` on the pulse would be a false claim about a pump that still
+      // hands out events through `reserve()`.
+      this.logger?.warn("pause() ignored: this pump has no processor. Stop calling reserve() instead.")
+      return
+    }
+    if (this.paused) return
+    this.paused = true
+    this.logger?.info("Data pump paused")
+    // Wake a process loop parked in `waitForEvents` so it exits promptly instead of
+    // lingering until the next event arrives. Public waiters are left alone.
+    this.notifyEventWaiters(false)
+  }
+
+  /**
+   * Resume delivery to the processor from the exact position where {@link pause} stopped it.
+   * Idempotent.
+   */
+  public resume(): void {
+    if (!this.paused) return
+    this.paused = false
+    // Clear any armed process-loop backoff. Without this, a pump that was failing
+    // before the pause stays dark for up to 30s after resume, which reads exactly
+    // like the "alive but never delivers" outage operators are trained to fear.
+    if (this.processLoopRestartTimer) {
+      clearTimeout(this.processLoopRestartTimer)
+      this.processLoopRestartTimer = undefined
+    }
+    this.processLoopBackoffGeneration = undefined
+    this.processLoopRestartAttempts = 0
+    this.logger?.info("Data pump resumed")
+    this.ensureProcessLoop()
+  }
+
   public stop(isRestart = false): void {
     this.running = false
     this.processLoopGeneration++
@@ -457,6 +518,11 @@ export class FlowcoreDataPump {
 
   private async reserveInternal(amount: number, generation?: number): Promise<FlowcoreEvent[]> {
     if (!this.running || (generation !== undefined && generation !== this.processLoopGeneration)) {
+      return []
+    }
+    // Process-loop reservations stop at a pause. Public `reserve()` callers are not
+    // affected — pause governs the processor, not the puller API.
+    if (generation !== undefined && this.paused) {
       return []
     }
     const events: FlowcoreEvent[] = []
@@ -639,6 +705,7 @@ export class FlowcoreDataPump {
     if (
       !this.options.processor ||
       !this.running ||
+      this.paused ||
       this.activeProcessLoopGeneration === this.processLoopGeneration ||
       this.processLoopBackoffGeneration === this.processLoopGeneration
     ) {
@@ -651,6 +718,7 @@ export class FlowcoreDataPump {
     const generation = this.processLoopGeneration
     if (
       !this.options.processor ||
+      this.paused ||
       !this.isCurrentProcessLoop(generation) ||
       this.activeProcessLoopGeneration === generation ||
       this.processLoopBackoffGeneration === generation
@@ -662,9 +730,16 @@ export class FlowcoreDataPump {
       .then(() => {
         if (this.activeProcessLoopGeneration !== generation) return
         this.activeProcessLoopGeneration = undefined
-        // The loop exits as soon as `running` goes false. If the pump is
-        // running again by the time we get here, a restart brought it back
-        // while this loop was finishing its last batch — resume delivery.
+        // The loop exits as soon as `running` goes false, or as soon as `paused`
+        // is set. If the pump is running and unpaused by the time we get here, a
+        // restart or a `resume()` landed while this loop was finishing its last
+        // batch — resume delivery.
+        //
+        // LOAD-BEARING: this is what makes a `pause()` immediately followed by a
+        // `resume()` safe. `resume()` calls `ensureProcessLoop()`, which no-ops
+        // while `activeProcessLoopGeneration` is still held by a loop that has
+        // returned but not yet unwound. This branch clears that flag and takes
+        // ownership instead. Do not remove it.
         if (this.isCurrentProcessLoop(generation)) {
           this.startProcessLoop()
         }
@@ -694,9 +769,13 @@ export class FlowcoreDataPump {
 
   private async processLoop(generation: number) {
     while (this.isCurrentProcessLoop(generation)) {
+      // Park on pause. `resume()` starts a fresh loop through `ensureProcessLoop`.
+      if (this.paused) return
       try {
         const events = await this.reserveInternal(this.options.processor?.concurrency ?? 1, generation)
         if (!this.isCurrentProcessLoop(generation)) return
+        // A pause landed while we were waiting for events. Re-check the guards.
+        if (!events.length) continue
         await this.replayObserver.observeHandler(events, async () => {
           await this.options.processor?.handler(events)
         })
