@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.23.1](https://github.com/flowcore-io/data-pump/compare/v0.23.0...v0.23.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **ci:** allow the npm publish to be dispatched manually ([#96](https://github.com/flowcore-io/data-pump/issues/96)) ([80c804d](https://github.com/flowcore-io/data-pump/commit/80c804d8443730bd06d591764169cc7f466dcf5d))
+* **ci:** publish to npm on node 22 ([#94](https://github.com/flowcore-io/data-pump/issues/94)) ([2a88186](https://github.com/flowcore-io/data-pump/commit/2a88186912164f675d6e0b1a86904f66b4c6018c))
+* **ci:** publish to npm the way the other Flowcore libraries do ([#97](https://github.com/flowcore-io/data-pump/issues/97)) ([6f6df28](https://github.com/flowcore-io/data-pump/commit/6f6df284025049293b23140f1d31f4c763db6b05))
+
 ## [0.23.0](https://github.com/flowcore-io/data-pump/compare/v0.22.3...v0.23.0) (2026-09-15)
 
 
