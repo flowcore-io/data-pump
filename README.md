@@ -97,6 +97,11 @@ processing is complete with no unfinished event before it. The source resumes **
 first, the pump holds their completion in memory until the earlier gap closes. After a crash, the pump may replay events
 whose completion was not durably checkpointed. Consumers must use `eventId` as a durable idempotency key.
 
+This corrects the older interpretation that stored the first unfinished event. Existing saved cursors are not rewritten:
+if an older version already stored an unfinished event ID, upgrading cannot recover the event that the exclusive resume
+boundary will skip. Reset or rewind a cursor only through an explicit operator decision; the pump does not reset it
+automatically.
+
 ### **Event Lifecycle & Processing Modes**
 
 Understanding how events flow through the system:
@@ -133,6 +138,11 @@ Buffer: [Event1, Event2, Event3, Event4, Event5]
 - **Batch processing**: Group multiple events for efficient processing
 - **Flow control**: Automatic throttling based on buffer capacity
 - **Memory protection**: Prevents unlimited memory growth during slow processing
+
+The fetch window is bounded by the checkpoint queue, not only by events still in the delivery buffer. One unfinished event
+therefore applies backpressure after `bufferSize` fetched events are retained behind it. This is intentional: continuing to
+fetch would grow the out-of-order completion frontier without bound. Monitor `checkpointQueueDepth` in pulses or
+`flowcore_data_pump_checkpoint_queue_depth_gauge` to distinguish this state from an idle empty buffer.
 
 ### **Live vs Historical Processing**
 
@@ -275,6 +285,13 @@ while (dataPump.isRunning) {
 `fail(eventIds)` is terminal: it removes matching events from the buffer and invokes `failedHandler` when configured. It
 does **not** schedule a retry. Leave a reservation unresolved to make it eligible for redelivery after the acknowledgment
 timeout.
+
+Terminal failure callbacks are notifications, not a transactional dead-letter guarantee. The pump advances the terminal
+event's checkpoint before waiting for `failedHandler` or `onFinalyFailed`; a callback rejection is still returned/logged,
+but it does not put the event back into the buffer. Stopping while a callback is in flight does not cancel it; the terminal
+completion and state write were already scheduled, so a late callback cannot complete an item from a later generation. If
+durable dead-letter storage is required, make the terminal decision only after that storage contract is satisfied, or use
+an idempotent external recovery workflow.
 
 ### Which Mode Should You Use?
 
@@ -535,6 +552,10 @@ shared durable state manager so only the elected leader fetches and advances the
 
 Persist every state update unless your storage adapter can prove that coalescing writes cannot advance beyond unfinished
 work. Skipping arbitrary checkpoint writes can increase replay and make the stored frontier misleading.
+
+Checkpoint writes are serialized. A `setState` call that never settles blocks all later checkpoint persistence, including
+after `restart()`. State adapters must apply their own bounded I/O timeout and reject on timeout. The pump intentionally
+does not race or detach a timed-out write because a late older write could otherwise overwrite a newer frontier.
 
 ### Choosing a State Manager
 
@@ -877,7 +898,7 @@ const dataPump = FlowcoreDataPump.create({
 ```
 
 Pulses include the current bucket and event ID, live status, buffer depth and reserved count, payload bytes, cumulative
-pulled, acknowledged and failed counts, and uptime. The first pulse is randomly staggered within the interval so replicas
+pulled, acknowledged and failed counts, checkpoint-queue depth, and uptime. The first pulse is randomly staggered within the interval so replicas
 do not all report at once. Pulse failures are logged and do not stop processing. `pulse.url` is independent of
 `baseUrlOverride`.
 
@@ -900,6 +921,7 @@ app.get("/metrics", async (req, res) => {
 - `flowcore_data_pump_buffer_events_gauge` - Events in buffer
 - `flowcore_data_pump_buffer_reserved_events_gauge` - Reserved events
 - `flowcore_data_pump_buffer_size_bytes_gauge` - Buffer size in bytes
+- `flowcore_data_pump_checkpoint_queue_depth_gauge` - Events retained by the contiguous checkpoint frontier
 - `flowcore_data_pump_events_acknowledged_counter` - Successfully processed events
 - `flowcore_data_pump_events_failed_counter` - Failed events
 - `flowcore_data_pump_events_pulled_size_bytes_counter` - Data throughput

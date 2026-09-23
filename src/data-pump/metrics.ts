@@ -54,6 +54,13 @@ export function createDataPumpMetrics(registry: Registry, includeDefaultRegistry
     registers,
   })
 
+  const checkpointQueueDepthGauge = new Gauge({
+    name: "flowcore_data_pump_checkpoint_queue_depth_gauge",
+    help: "The number of fetched events still retained by the contiguous checkpoint frontier",
+    labelNames: SOURCE_LABELS,
+    registers,
+  })
+
   const eventsAcknowledgedCounter = new Counter({
     name: "flowcore_data_pump_events_acknowledged_counter",
     help: "The number of events acknowledged",
@@ -134,6 +141,7 @@ export function createDataPumpMetrics(registry: Registry, includeDefaultRegistry
     bufferEventCountGauge,
     bufferReservedEventCountGauge,
     bufferSizeBytesGauge,
+    checkpointQueueDepthGauge,
     eventsAcknowledgedCounter,
     eventsFailedCounter,
     eventsPulledSizeBytesCounter,

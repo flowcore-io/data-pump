@@ -131,8 +131,54 @@ class ExclusiveResumeSource extends FlowcoreDataSource {
     this.requestedStates.push({ ...from })
     if (this.fetched) return new Promise(() => {})
     this.fetched = true
-    const index = from.eventId ? this.orderedEvents.findIndex((item) => item.eventId === from.eventId) : -1
-    return Promise.resolve({ events: this.orderedEvents.slice(index + 1), nextCursor: undefined })
+    const bucketEvents = this.orderedEvents.filter((item) => item.timeBucket >= from.timeBucket)
+    const index = from.eventId ? bucketEvents.findIndex((item) => item.eventId === from.eventId) : -1
+    return Promise.resolve({ events: bucketEvents.slice(index + 1), nextCursor: undefined })
+  }
+}
+
+class GeneratedPagesSource extends FlowcoreDataSource {
+  public calls = 0
+  private nextIndex = 0
+
+  constructor(private readonly delayMs = 0) {
+    super({ auth: AUTH, dataSource: DATA_SOURCE, noTranslation: true })
+  }
+
+  override getClosestTimeBucket(timeBucket?: string): Promise<string> {
+    return Promise.resolve(timeBucket ?? "20260923120000")
+  }
+
+  override getNextTimeBucket(): Promise<null> {
+    return Promise.resolve(null)
+  }
+
+  override async getEvents(_from: FlowcoreDataPumpState, amount: number): Promise<EventListOutput> {
+    this.calls++
+    if (this.delayMs) await new Promise((resolve) => setTimeout(resolve, this.delayMs))
+    const events = Array.from({ length: amount }, () => event(this.nextIndex++))
+    return { events, nextCursor: "more" }
+  }
+}
+
+class FiniteStopSource extends FlowcoreDataSource {
+  public calls = 0
+
+  constructor(private readonly events: FlowcoreEvent[]) {
+    super({ auth: AUTH, dataSource: DATA_SOURCE, noTranslation: true })
+  }
+
+  override getClosestTimeBucket(timeBucket?: string): Promise<string> {
+    return Promise.resolve(timeBucket ?? this.events[0]!.timeBucket)
+  }
+
+  override getNextTimeBucket(): Promise<null> {
+    return Promise.resolve(null)
+  }
+
+  override getEvents(): Promise<EventListOutput> {
+    this.calls++
+    return Promise.resolve({ events: this.calls === 1 ? this.events : [], nextCursor: undefined })
   }
 }
 
@@ -270,6 +316,65 @@ describe("contiguous checkpoint frontier", () => {
     expect(next?.eventId).toBe(events[2]!.eventId)
   })
 
+  it("releases a larger fetch window only after the open gap closes", async () => {
+    const events = Array.from({ length: 11 }, (_, index) => event(index))
+    const source = new CursorPagesSource(events.slice(0, 10), events.slice(10))
+    const pump = await startPump(
+      events.slice(0, 10),
+      {
+        getState: () => ({ timeBucket: events[0]!.timeBucket }),
+        setState: () => {},
+      },
+      source,
+    )
+    const reserved = await pump.reserve(10)
+
+    await pump.acknowledge(reserved.slice(1).map((item) => item.eventId))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(source.calls).toBe(1)
+    expect(pump.getSnapshot()?.checkpointQueueDepth).toBe(10)
+
+    await pump.acknowledge([reserved[0]!.eventId])
+    await waitUntil(() => source.calls >= 2, "fetching did not resume after the larger gap closed")
+  })
+
+  it("does not finish stopAt while a checkpoint gap remains open", async () => {
+    const events = [event(0), event(1), event(2)]
+    const source = new FiniteStopSource(events)
+    const checkpoints: FlowcoreDataPumpState[] = []
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: AUTH,
+        dataSource: DATA_SOURCE,
+        stateManager: {
+          getState: () => ({ timeBucket: events[0]!.timeBucket }),
+          setState: (state) => {
+            checkpoints.push({ ...state })
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        bufferSize: events.length,
+        stopAt: new Date(events[2]!.validTime),
+        achknowledgeTimeoutMs: 60_000,
+        noTranslation: true,
+      },
+      source,
+    )
+    pumps.push(pump)
+    void pump.start(() => {})
+    await waitUntil(() => pump.getSnapshot()?.bufferDepth === events.length, "stopAt pump did not fill")
+    const reserved = await pump.reserve(events.length)
+
+    await pump.acknowledge(reserved.slice(1).map((item) => item.eventId))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(pump.isRunning).toBe(true)
+    expect(checkpoints).toEqual([])
+
+    await pump.acknowledge([reserved[0]!.eventId])
+    await waitUntil(() => !pump.isRunning, "stopAt did not finish after the gap closed")
+    expect(checkpoints.at(-1)).toEqual({ timeBucket: events[2]!.timeBucket, eventId: events[2]!.eventId })
+  })
+
   it("advances through already completed later events once the gap closes", async () => {
     const events = [event(0), event(1), event(2)]
     const checkpoints: FlowcoreDataPumpState[] = []
@@ -356,6 +461,34 @@ describe("contiguous checkpoint frontier", () => {
     expect(checkpoints).toEqual([{ timeBucket: events[1]!.timeBucket, eventId: events[1]!.eventId }])
   })
 
+  it("resumes after an in-order partial acknowledgement without skipping the next event", async () => {
+    const previous = event(59, 11)
+    const events = [event(0), event(1), event(2)]
+    let persisted: FlowcoreDataPumpState = { timeBucket: previous.timeBucket, eventId: previous.eventId }
+    const stateManager: FlowcoreDataPumpStateManager = {
+      getState: () => ({ ...persisted }),
+      setState: (state) => {
+        persisted = { ...state }
+      },
+    }
+    const firstPump = await startPump(events, stateManager, new ExclusiveResumeSource([previous, ...events]))
+    const reserved = await firstPump.reserve(2)
+
+    await firstPump.acknowledge([reserved[0]!.eventId])
+    firstPump.stop()
+
+    const resumedPump = await startPump(
+      events.slice(1),
+      stateManager,
+      new ExclusiveResumeSource([previous, ...events]),
+      events.length - 1,
+    )
+    const replayed = await resumedPump.reserve(events.length - 1)
+
+    expect(persisted).toEqual({ timeBucket: events[0]!.timeBucket, eventId: events[0]!.eventId })
+    expect(replayed.map((item) => item.eventId)).toEqual(events.slice(1).map((item) => item.eventId))
+  })
+
   it("resumes after the last contiguous completion without skipping unfinished work", async () => {
     const previous = event(59, 11)
     const events = [event(0), event(1), event(2)]
@@ -380,6 +513,69 @@ describe("contiguous checkpoint frontier", () => {
     expect(persisted).toEqual({ timeBucket: previous.timeBucket, eventId: previous.eventId })
     expect(resumeSource.requestedStates[0]).toEqual(persisted)
     expect(replayed.map((item) => item.eventId)).toEqual(events.map((item) => item.eventId))
+  })
+
+  it("restarts a paused pump after an out-of-order acknowledgement without skipping the gap", async () => {
+    const previous = event(59, 11)
+    const events = [event(0), event(1), event(2)]
+    let persisted: FlowcoreDataPumpState = { timeBucket: previous.timeBucket, eventId: previous.eventId }
+    const stateManager: FlowcoreDataPumpStateManager = {
+      getState: () => ({ ...persisted }),
+      setState: (state) => {
+        persisted = { ...state }
+      },
+    }
+    const firstPump = FlowcoreDataPump.create(
+      {
+        auth: AUTH,
+        dataSource: DATA_SOURCE,
+        stateManager,
+        processor: { handler: () => Promise.resolve() },
+        paused: true,
+        notifier: { type: "poller", intervalMs: 60_000 },
+        bufferSize: events.length,
+        achknowledgeTimeoutMs: 60_000,
+        noTranslation: true,
+      },
+      new ExclusiveResumeSource([previous, ...events]),
+    )
+    pumps.push(firstPump)
+    void firstPump.start(() => {})
+    await waitUntil(() => firstPump.getSnapshot()?.bufferDepth === events.length, "paused pump did not fill")
+    const reserved = await firstPump.reserve(2)
+    expect(firstPump.isPaused).toBe(true)
+    await firstPump.acknowledge([reserved[1]!.eventId])
+    firstPump.stop()
+
+    const resumedPump = await startPump(
+      events,
+      stateManager,
+      new ExclusiveResumeSource([previous, ...events]),
+      events.length,
+    )
+    const replayed = await resumedPump.reserve(events.length)
+
+    expect(persisted).toEqual({ timeBucket: previous.timeBucket, eventId: previous.eventId })
+    expect(replayed.map((item) => item.eventId)).toEqual(events.map((item) => item.eventId))
+  })
+
+  it("treats duplicate event IDs in one page as one acknowledgement identity", async () => {
+    const duplicate = event(0)
+    const events = [duplicate, { ...duplicate, payload: { index: 1 } }, event(2)]
+    const checkpoints: FlowcoreDataPumpState[] = []
+    const pump = await startPump(events, {
+      getState: () => ({ timeBucket: duplicate.timeBucket }),
+      setState: (state) => {
+        checkpoints.push({ ...state })
+      },
+    })
+    const reserved = await pump.reserve(3)
+
+    await pump.acknowledge([duplicate.eventId])
+
+    expect(checkpoints).toEqual([{ timeBucket: duplicate.timeBucket, eventId: duplicate.eventId }])
+    expect(pump.getSnapshot()?.bufferDepth).toBe(1)
+    expect(reserved[2]!.eventId).toBe(events[2]!.eventId)
   })
 
   it("serializes checkpoint writes so a slower earlier write cannot overwrite a later frontier", async () => {
@@ -451,7 +647,83 @@ describe("contiguous checkpoint frontier", () => {
     expect(checkpoints).toEqual([{ timeBucket: events[1]!.timeBucket, eventId: events[1]!.eventId }])
   })
 
-  it("does not let a stale direct failure complete a replayed event after restart", async () => {
+  it("keeps fetching after direct fail completes terminally even when failedHandler throws", async () => {
+    const source = new GeneratedPagesSource(1)
+    const checkpoints: FlowcoreDataPumpState[] = []
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: AUTH,
+        dataSource: DATA_SOURCE,
+        stateManager: {
+          getState: () => ({ timeBucket: "20260923120000" }),
+          setState: (state) => {
+            checkpoints.push({ ...state })
+          },
+        },
+        processor: {
+          handler: () => Promise.resolve(),
+          failedHandler: () => {
+            throw new Error("failedHandler unavailable")
+          },
+        },
+        paused: true,
+        notifier: { type: "poller", intervalMs: 60_000 },
+        bufferSize: 10,
+        achknowledgeTimeoutMs: 60_000,
+        noTranslation: true,
+      },
+      source,
+    )
+    pumps.push(pump)
+    void pump.start(() => {})
+    await waitUntil(() => pump.getSnapshot()?.bufferDepth === 10, "pump did not fill the direct-fail buffer")
+    const [failed] = await pump.reserve(1)
+
+    await expect(pump.fail([failed!.eventId])).rejects.toThrow("failedHandler unavailable")
+    await waitUntil(() => source.calls >= 2, "direct terminal failure permanently stalled fetching")
+
+    expect(checkpoints[0]).toEqual({ timeBucket: failed!.timeBucket, eventId: failed!.eventId })
+  })
+
+  it("keeps processor mode fetching after terminal callbacks throw", async () => {
+    const source = new GeneratedPagesSource(1)
+    let failedHandlerCalls = 0
+    let finallyFailedCalls = 0
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: AUTH,
+        dataSource: DATA_SOURCE,
+        stateManager: { getState: () => ({ timeBucket: "20260923120000" }), setState: () => {} },
+        processor: {
+          concurrency: 1,
+          handler: async (events) => {
+            if ((events[0]!.payload as { index: number }).index === 0) throw new Error("poison")
+          },
+          failedHandler: () => {
+            failedHandlerCalls++
+            throw new Error("failedHandler unavailable")
+          },
+        },
+        notifier: { type: "poller", intervalMs: 60_000 },
+        bufferSize: 10,
+        maxRedeliveryCount: 0,
+        achknowledgeTimeoutMs: 5,
+        noTranslation: true,
+      },
+      source,
+    )
+    pump.onFinalyFailed(() => {
+      finallyFailedCalls++
+      throw new Error("final callback unavailable")
+    })
+    pumps.push(pump)
+    void pump.start(() => {})
+
+    await waitUntil(() => failedHandlerCalls > 0 && finallyFailedCalls > 0, "terminal callbacks did not run")
+    await waitUntil(() => source.calls >= 3, "processor terminal failure permanently stalled fetching")
+  })
+
+  it("does not let a stale direct failure callback complete a replayed event twice after restart", async () => {
     const previous = event(59, 11)
     const replayedEvent = event(0)
     const checkpoints: FlowcoreDataPumpState[] = []
@@ -474,6 +746,7 @@ describe("contiguous checkpoint frontier", () => {
 
     const oldFailure = pump.fail([oldDelivery!.eventId])
     await waitUntil(() => failedHandlerCalls === 1, "old failed handler did not start")
+    expect(checkpoints).toEqual([{ timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId }])
     pump.restart({ timeBucket: previous.timeBucket, eventId: previous.eventId })
     await waitUntil(
       () => source.calls >= 2 && pump.getSnapshot()?.bufferDepth === 1,
@@ -481,15 +754,16 @@ describe("contiguous checkpoint frontier", () => {
     )
     const [newDelivery] = await pump.reserve(1)
 
+    await pump.acknowledge([newDelivery!.eventId])
     failedHandler.resolve()
     await oldFailure
-    expect(checkpoints).toEqual([])
-
-    await pump.acknowledge([newDelivery!.eventId])
-    expect(checkpoints).toEqual([{ timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId }])
+    expect(checkpoints).toEqual([
+      { timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId },
+      { timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId },
+    ])
   })
 
-  it("does not let a stale terminal reopen complete a replayed event after restart", async () => {
+  it("does not let a stale terminal reopen callback complete a replayed event twice after restart", async () => {
     const previous = event(59, 11)
     const replayedEvent = event(0)
     const checkpoints: FlowcoreDataPumpState[] = []
@@ -507,23 +781,11 @@ describe("contiguous checkpoint frontier", () => {
         failedHandlerCalls++
         return failedHandler.promise
       },
-      1,
+      20,
     )
-    const internals = pump as unknown as {
-      reOpen: (eventIds: string[], deliveryId: string) => Promise<void>
-    }
-    const originalReOpen = internals.reOpen.bind(pump)
-    let terminalReOpen: Promise<void> | undefined
-    internals.reOpen = (eventIds, deliveryId) => {
-      terminalReOpen = originalReOpen(eventIds, deliveryId)
-      return terminalReOpen
-    }
-
     await pump.reserve(1)
-    await waitUntil(
-      () => failedHandlerCalls === 1 && terminalReOpen !== undefined,
-      "terminal acknowledgement timeout did not start",
-    )
+    await waitUntil(() => failedHandlerCalls === 1, "terminal acknowledgement timeout did not start")
+    expect(checkpoints).toEqual([{ timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId }])
     pump.restart({ timeBucket: previous.timeBucket, eventId: previous.eventId })
     await waitUntil(
       () => source.calls >= 2 && pump.getSnapshot()?.bufferDepth === 1,
@@ -531,11 +793,12 @@ describe("contiguous checkpoint frontier", () => {
     )
     const [newDelivery] = await pump.reserve(1)
 
-    failedHandler.resolve()
-    await terminalReOpen
-    expect(checkpoints).toEqual([])
-
     await pump.acknowledge([newDelivery!.eventId])
-    expect(checkpoints).toEqual([{ timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId }])
+    failedHandler.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(checkpoints).toEqual([
+      { timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId },
+      { timeBucket: replayedEvent.timeBucket, eventId: replayedEvent.eventId },
+    ])
   })
 })

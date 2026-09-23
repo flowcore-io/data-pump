@@ -261,7 +261,7 @@ describe("data pump low-risk buffer bookkeeping", () => {
       deliveryId,
     )
 
-    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, failedTotal: 1 })
+    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, checkpointQueueDepth: 0, failedTotal: 1 })
   })
 
   it("publishes acknowledgement gauges while checkpoint persistence is delayed", async () => {
@@ -315,7 +315,7 @@ describe("data pump low-risk buffer bookkeeping", () => {
     await expectWaiterToResolve(waiter)
   })
 
-  it("awaits and propagates a rejecting failedHandler on direct failure without checkpointing", async () => {
+  it("checkpoints terminal direct failure before propagating a rejecting failedHandler", async () => {
     const event = makeEvent("alpha.0", { index: 0 })
     const checkpoints: Array<{ timeBucket: string; eventId?: string }> = []
     const pump = await createStartedPump(
@@ -333,8 +333,8 @@ describe("data pump low-risk buffer bookkeeping", () => {
 
     await expect(pump.fail([event.eventId])).rejects.toThrow("failed handler rejected")
 
-    expect(checkpoints).toEqual([])
-    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, failedTotal: 1 })
+    expect(checkpoints).toEqual([{ timeBucket: event.timeBucket, eventId: event.eventId }])
+    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, checkpointQueueDepth: 0, failedTotal: 1 })
     await expectWaiterToResolve(waiter)
   })
 
@@ -380,7 +380,7 @@ describe("data pump low-risk buffer bookkeeping", () => {
     expect((errors[0].metadata?.error as Error).message).toBe("checkpoint rejected")
   })
 
-  it("awaits and handles a rejecting failedHandler during timer-driven terminal reOpen", async () => {
+  it("checkpoints terminal reOpen before handling a rejecting failedHandler", async () => {
     const errors: Array<{ message: string | Error; metadata?: Record<string, unknown> }> = []
     const checkpoints: Array<{ timeBucket: string; eventId?: string }> = []
     const logger: FlowcoreLogger = {
@@ -408,12 +408,12 @@ describe("data pump low-risk buffer bookkeeping", () => {
     }
 
     expect((errors[0].metadata?.error as Error).message).toBe("failed handler rejected")
-    expect(checkpoints).toEqual([])
-    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, failedTotal: 1 })
+    expect(checkpoints).toEqual([{ timeBucket: event.timeBucket, eventId: event.eventId }])
+    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, checkpointQueueDepth: 0, failedTotal: 1 })
     await expectWaiterToResolve(waiter)
   })
 
-  it("awaits and handles a rejecting onFinalyFailed callback during timer-driven terminal reOpen", async () => {
+  it("checkpoints terminal reOpen before handling a rejecting onFinalyFailed callback", async () => {
     const errors: Array<{ message: string | Error; metadata?: Record<string, unknown> }> = []
     const checkpoints: Array<{ timeBucket: string; eventId?: string }> = []
     const logger: FlowcoreLogger = {
@@ -441,8 +441,8 @@ describe("data pump low-risk buffer bookkeeping", () => {
     }
 
     expect((errors[0].metadata?.error as Error).message).toBe("finally failed handler rejected")
-    expect(checkpoints).toEqual([])
-    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, failedTotal: 1 })
+    expect(checkpoints).toEqual([{ timeBucket: event.timeBucket, eventId: event.eventId }])
+    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, checkpointQueueDepth: 0, failedTotal: 1 })
     await expectWaiterToResolve(waiter)
   })
 
@@ -482,8 +482,8 @@ describe("data pump low-risk buffer bookkeeping", () => {
 
     expect(callbacks).toEqual(["failedHandler", "onFinalyFailed"])
     expect((errors[0].metadata?.error as Error).message).toBe("failed handler rejected")
-    expect(checkpoints).toEqual([])
-    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, failedTotal: 1 })
+    expect(checkpoints).toEqual([{ timeBucket: event.timeBucket, eventId: event.eventId }])
+    expect(pump.getSnapshot()).toMatchObject({ bufferDepth: 0, checkpointQueueDepth: 0, failedTotal: 1 })
     await expectWaiterToResolve(waiter)
   })
 

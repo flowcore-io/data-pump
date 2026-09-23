@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* Persist the last contiguous completed event instead of the first unfinished event. Resume remains exclusive (`afterEventId`). Existing cursors written by older versions are not automatically reset and cannot recover an event that was already skipped.
+* Prevent throwing terminal-failure callbacks from retaining unreachable checkpoint items and permanently stalling fetching.
+
+### Observability
+
+* Report checkpoint-queue depth in pump pulses and `flowcore_data_pump_checkpoint_queue_depth_gauge` so bounded gap backpressure is distinguishable from an idle buffer.
+
 ## [0.23.1](https://github.com/flowcore-io/data-pump/compare/v0.23.0...v0.23.1) (2026-09-15)
 
 
