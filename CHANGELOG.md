@@ -11,6 +11,13 @@
 
 * Report checkpoint-queue depth in pump pulses and `flowcore_data_pump_checkpoint_queue_depth_gauge` so bounded gap backpressure is distinguishable from an idle buffer.
 
+## [0.23.3](https://github.com/flowcore-io/data-pump/compare/v0.23.2...v0.23.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* checkpoint only contiguous completed events ([0307aac](https://github.com/flowcore-io/data-pump/commit/0307aaca433a4d6522e7dff21b23110653a61f63))
+
 ## [0.23.2](https://github.com/flowcore-io/data-pump/compare/v0.23.1...v0.23.2) (2026-09-23)
 
 
