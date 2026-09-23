@@ -30,6 +30,8 @@ export interface PulseSnapshot {
   bufferDepth: number
   bufferReserved: number
   bufferSizeBytes: number
+  /** Fetched events retained until the contiguous checkpoint frontier advances. */
+  checkpointQueueDepth?: number
   acknowledgedTotal: number
   failedTotal: number
   pulledTotal: number
@@ -115,6 +117,7 @@ export class PulseEmitter {
         reserved: snapshot.bufferReserved,
         sizeBytes: snapshot.bufferSizeBytes,
       },
+      checkpointQueueDepth: snapshot.checkpointQueueDepth,
       counters: {
         acknowledged: snapshot.acknowledgedTotal,
         failed: snapshot.failedTotal,
@@ -130,6 +133,7 @@ export class PulseEmitter {
       timeBucket: snapshot.timeBucket,
       isLive: snapshot.isLive,
       bufferDepth: snapshot.bufferDepth,
+      checkpointQueueDepth: snapshot.checkpointQueueDepth,
     })
   }
 }

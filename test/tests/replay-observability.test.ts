@@ -55,6 +55,7 @@ describe("replay observability metrics", () => {
         "flowcore_data_pump_buffer_events_gauge",
         "flowcore_data_pump_buffer_reserved_events_gauge",
         "flowcore_data_pump_buffer_size_bytes_gauge",
+        "flowcore_data_pump_checkpoint_queue_depth_gauge",
       ]),
     )
 
@@ -186,7 +187,35 @@ describe("replay observability metrics", () => {
 
     const stateManager = new ClassBasedStateManager()
     const eventId = TimeUuid.now().toString()
-    const pump = FlowcoreDataPump.create({
+    const checkpointEvent: FlowcoreEvent = {
+      eventId,
+      timeBucket: "20260923120000",
+      tenant: "test-tenant",
+      dataCoreId: "test-data-core",
+      flowType: "test-flow-type",
+      eventType: "test.created.0",
+      metadata: {},
+      validTime: new Date().toISOString(),
+      payload: {},
+    }
+    class OneEventSource extends FlowcoreDataSource {
+      private fetched = false
+
+      public override getClosestTimeBucket(): Promise<string> {
+        return Promise.resolve(checkpointEvent.timeBucket)
+      }
+
+      public override getNextTimeBucket(): Promise<null> {
+        return Promise.resolve(null)
+      }
+
+      public override getEvents(): Promise<EventListOutput> {
+        if (this.fetched) return new Promise(() => {})
+        this.fetched = true
+        return Promise.resolve({ events: [checkpointEvent], nextCursor: undefined })
+      }
+    }
+    const dataSource = new OneEventSource({
       auth: { apiKey: "fc_testid_testsecret" },
       dataSource: {
         tenant: "test-tenant",
@@ -194,12 +223,29 @@ describe("replay observability metrics", () => {
         flowType: "test-flow-type",
         eventTypes: ["test.created.0"],
       },
-      stateManager,
-      notifier: { type: "poller", intervalMs: 60_000 },
       noTranslation: true,
     })
+    const pump = FlowcoreDataPump.create(
+      {
+        auth: { apiKey: "fc_testid_testsecret" },
+        dataSource: {
+          tenant: "test-tenant",
+          dataCore: "test-data-core",
+          flowType: "test-flow-type",
+          eventTypes: ["test.created.0"],
+        },
+        stateManager,
+        notifier: { type: "poller", intervalMs: 60_000 },
+        bufferSize: 1,
+        noTranslation: true,
+      },
+      dataSource,
+    )
 
-    await (pump as unknown as { updateState: (checkpointEventId: string) => Promise<void> | void }).updateState(eventId)
+    void pump.start(() => {})
+    const [reserved] = await pump.reserve(1)
+    await pump.acknowledge([reserved!.eventId])
+    pump.stop()
 
     expect(stateManager.state?.eventId).toBe(eventId)
   })

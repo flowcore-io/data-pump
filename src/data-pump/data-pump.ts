@@ -86,11 +86,17 @@ interface FlowcoreDataPumpInnerOptions {
 
 interface FlowcoreDataPumpBufferItem {
   event: FlowcoreEvent
+  checkpointItem: FlowcoreDataPumpCheckpointItem
   status: "open" | "reserved"
   deliveryCount: number
   payloadSizeBytes: number
   eventSizeBytes?: number
   deliveryId?: string
+}
+
+interface FlowcoreDataPumpCheckpointItem {
+  state: FlowcoreDataPumpState
+  completed: boolean
 }
 
 interface FlowcoreDataPumpBufferStats {
@@ -116,6 +122,8 @@ export class FlowcoreDataPump {
   private processLoopRestartTimer?: ReturnType<typeof setTimeout>
   private abortController?: AbortController
   private buffer: FlowcoreDataPumpBufferItem[] = []
+  private checkpointQueue: FlowcoreDataPumpCheckpointItem[] = []
+  private checkpointWriteTail: Promise<void> = Promise.resolve()
   private bufferState: FlowcoreDataPumpState
   private stopAtState?: FlowcoreDataPumpState
   private isLive = false
@@ -178,6 +186,7 @@ export class FlowcoreDataPump {
       bufferDepth: this.buffer.length,
       bufferReserved: this.bufferReservedCount,
       bufferSizeBytes: this.bufferSizeBytes,
+      checkpointQueueDepth: this.checkpointQueue.length,
       acknowledgedTotal: this.acknowledgedCount,
       failedTotal: this.failedCount,
       pulledTotal: this.pulledCount,
@@ -397,6 +406,7 @@ export class FlowcoreDataPump {
     this.processLoopRestartAttempts = 0
     this.mainLoopRestartAttempts = 0
     this.buffer = []
+    this.checkpointQueue = []
     this.resetBufferStats()
     this.updateMetricsGauges(true)
     this.pulseEmitter?.stop()
@@ -405,24 +415,25 @@ export class FlowcoreDataPump {
     this.notifyEventWaiters(!isRestart)
   }
 
-  private updateState(eventId?: string): Promise<void> | void {
+  private updateState(state?: FlowcoreDataPumpState): Promise<void> | void {
     const stateManager = this.stateManager
-    if (!stateManager.setState) {
+    if (!stateManager.setState || !state) {
       return
     }
-    const stateEventId = eventId ?? this.buffer[0]?.event.eventId
-    if (!stateEventId) {
-      return
-    }
-    const date = TimeUuid.fromString(stateEventId).getDate()
-    const timeBucket = format(startOfHour(utc(date)), "yyyyMMddHH0000")
-    return this.replayObserver.observeCheckpoint(() => stateManager.setState!({ timeBucket, eventId: stateEventId }))
+    const write = this.checkpointWriteTail
+      .catch(() => {})
+      .then(() => this.replayObserver.observeCheckpoint(() => stateManager.setState!({ ...state })))
+    this.checkpointWriteTail = write
+    return write
   }
 
   private async loop(): Promise<void> {
     do {
       this.ensureProcessLoop()
-      const amountToFetch = this.options.bufferSize - this.buffer.length
+      // Completed events after an unfinished gap stay in the checkpoint queue until
+      // the gap closes. Count them against the fetch window so arbitrary out-of-order
+      // acknowledgements cannot grow the in-memory frontier without bound.
+      const amountToFetch = this.options.bufferSize - this.checkpointQueue.length
 
       if (amountToFetch <= 0) {
         this.logger?.info("Buffer is full, waiting for space")
@@ -585,29 +596,31 @@ export class FlowcoreDataPump {
       return
     }
     const eventIdSet = new Set(eventIds)
-    const checkpointEventId = this.replayObserver.observeAcknowledgement(() => {
-      const lastEventInBuffer = this.buffer[this.buffer.length - 1]
+    const checkpoint = this.replayObserver.observeAcknowledgement(() => {
+      const acknowledgedItems: FlowcoreDataPumpCheckpointItem[] = []
       this.buffer = this.buffer.filter((event) => {
         if (eventIdSet.has(event.event.eventId)) {
           this.incMetricsCounter("acknowledged", event.event.eventType, 1)
           this.acknowledgedCount++
+          acknowledgedItems.push(event.checkpointItem)
           this.removeFromBufferStats(event)
           return false
         }
         return true
       })
 
-      if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
+      const checkpoint = this.completeCheckpointItems(acknowledgedItems)
+      if (this.checkpointQueue.length <= this.options.bufferSize - this.options.bufferThreshold) {
         this.waiterBufferThreshold?.()
       }
 
-      return this.buffer.length ? undefined : lastEventInBuffer?.event.eventId
+      return checkpoint
     })
 
     this.updateMetricsGauges()
 
     try {
-      await this.updateState(checkpointEventId)
+      await this.updateState(checkpoint)
     } finally {
       this.notifyBufferEmpty()
     }
@@ -617,14 +630,15 @@ export class FlowcoreDataPump {
     if (!this.running || !eventIds.length) {
       return
     }
-    const lastEventInBuffer = this.buffer[this.buffer.length - 1]
     const eventIdSet = new Set(eventIds)
     const failedEvents: FlowcoreEvent[] = []
+    const failedItems: FlowcoreDataPumpCheckpointItem[] = []
     this.buffer = this.buffer.filter((event) => {
       if (eventIdSet.has(event.event.eventId)) {
         this.incMetricsCounter("failed", event.event.eventType, 1)
         this.failedCount++
         failedEvents.push(event.event)
+        failedItems.push(event.checkpointItem)
         this.removeFromBufferStats(event)
         return false
       }
@@ -632,15 +646,8 @@ export class FlowcoreDataPump {
     })
     this.logger?.info(`Failed ${failedEvents.length} events`)
 
-    if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
-      this.waiterBufferThreshold?.()
-    }
-
-    this.updateMetricsGauges()
-
     try {
-      await this.options.processor?.failedHandler?.(failedEvents)
-      await this.updateState(this.buffer.length ? undefined : lastEventInBuffer?.event.eventId)
+      await this.completeTerminalFailures(failedItems, [() => this.options.processor?.failedHandler?.(failedEvents)])
     } finally {
       this.notifyBufferEmpty()
     }
@@ -648,8 +655,8 @@ export class FlowcoreDataPump {
 
   private async reOpen(eventIds: string[], deliveryId: string) {
     const eventIdSet = new Set(eventIds)
-    let lastEvent: FlowcoreEvent | undefined
     const failedEvents: FlowcoreEvent[] = []
+    const failedItems: FlowcoreDataPumpCheckpointItem[] = []
     const reopenedEvents: FlowcoreEvent[] = []
     this.buffer = this.buffer.filter((event) => {
       if (event.deliveryId !== deliveryId || !eventIdSet.has(event.event.eventId)) {
@@ -659,7 +666,7 @@ export class FlowcoreDataPump {
         this.incMetricsCounter("failed", event.event.eventType, 1)
         this.failedCount++
         failedEvents.push(event.event)
-        lastEvent = event.event
+        failedItems.push(event.checkpointItem)
         this.removeFromBufferStats(event)
         return false
       }
@@ -670,9 +677,8 @@ export class FlowcoreDataPump {
       return true
     })
 
-    this.updateMetricsGauges()
-
     if (reopenedEvents.length) {
+      this.updateMetricsGauges()
       this.logger?.info(`Reopened ${reopenedEvents.length} events`)
       this.notifyEventWaiters()
     }
@@ -683,22 +689,11 @@ export class FlowcoreDataPump {
 
     this.logger?.info(`Failed ${failedEvents.length} events`)
 
-    if (this.buffer.length <= this.options.bufferSize - this.options.bufferThreshold) {
-      this.waiterBufferThreshold?.()
-    }
-
     try {
-      const callbackResults = await Promise.allSettled([
-        Promise.resolve().then(() => this.options.processor?.failedHandler?.(failedEvents)),
-        Promise.resolve().then(() => this.finallyFailedHandler?.(failedEvents)),
+      await this.completeTerminalFailures(failedItems, [
+        () => this.options.processor?.failedHandler?.(failedEvents),
+        () => this.finallyFailedHandler?.(failedEvents),
       ])
-      const callbackFailure = callbackResults.find(
-        (result): result is PromiseRejectedResult => result.status === "rejected",
-      )
-      if (callbackFailure) {
-        throw callbackFailure.reason
-      }
-      await this.updateState(this.buffer.length ? undefined : lastEvent?.eventId)
     } finally {
       this.notifyBufferEmpty()
     }
@@ -809,13 +804,19 @@ export class FlowcoreDataPump {
 
   private addEventsToBuffer(events: FlowcoreEvent[]): void {
     for (const event of events) {
+      const checkpointItem: FlowcoreDataPumpCheckpointItem = {
+        state: { timeBucket: event.timeBucket, eventId: event.eventId },
+        completed: false,
+      }
       const item: FlowcoreDataPumpBufferItem = {
         event,
+        checkpointItem,
         status: "open",
         deliveryCount: 0,
         payloadSizeBytes: textEncoder.encode(JSON.stringify(event.payload)).byteLength,
       }
       this.buffer.push(item)
+      this.checkpointQueue.push(checkpointItem)
       this.bufferSizeBytes += item.payloadSizeBytes
       const stat = this.bufferStats.get(event.eventType)
       if (stat) {
@@ -823,6 +824,50 @@ export class FlowcoreDataPump {
         stat.eventSizeBytes += item.payloadSizeBytes
       }
     }
+  }
+
+  private completeCheckpointItems(items: FlowcoreDataPumpCheckpointItem[]): FlowcoreDataPumpState | undefined {
+    // Completion is tied to the exact fetched item, not its reusable event ID.
+    // A terminal-failure callback may outlive stop/restart; marking its captured
+    // item cannot complete a same-ID item fetched into the new checkpoint queue.
+    for (const item of items) item.completed = true
+
+    let checkpoint: FlowcoreDataPumpState | undefined
+    while (this.checkpointQueue[0]?.completed) {
+      const completed = this.checkpointQueue.shift()!
+      checkpoint = completed.state
+    }
+    return checkpoint
+  }
+
+  private async completeTerminalFailures(
+    items: FlowcoreDataPumpCheckpointItem[],
+    callbacks: Array<() => Promise<void> | void | undefined>,
+  ): Promise<void> {
+    // Terminal failure is the delivery decision: these events have already left
+    // the buffer and will not be retried in-process. The callbacks are
+    // notifications, not a durable-delivery gate, so their failure must not
+    // retain unreachable checkpoint items and permanently close the fetch window.
+    const checkpoint = this.completeCheckpointItems(items)
+    if (this.checkpointQueue.length <= this.options.bufferSize - this.options.bufferThreshold) {
+      this.waiterBufferThreshold?.()
+    }
+    this.updateMetricsGauges()
+
+    // Schedule persistence before invoking callbacks. A slow callback cannot let
+    // a later checkpoint persist first and then overwrite it with this older
+    // frontier when the callback eventually returns.
+    const checkpointWrite = Promise.resolve(this.updateState(checkpoint))
+    const results = await Promise.allSettled([
+      checkpointWrite,
+      ...callbacks.map((callback) => Promise.resolve().then(callback)),
+    ])
+    const callbackFailure = results
+      .slice(1)
+      .find((result): result is PromiseRejectedResult => result.status === "rejected")
+    if (callbackFailure) throw callbackFailure.reason
+    const checkpointFailure = results[0]
+    if (checkpointFailure?.status === "rejected") throw checkpointFailure.reason
   }
 
   private updateReservedStats(item: FlowcoreDataPumpBufferItem, delta: 1 | -1): void {
@@ -867,6 +912,14 @@ export class FlowcoreDataPump {
   }
 
   private publishMetricsGauges(): void {
+    metrics.checkpointQueueDepthGauge.set(
+      {
+        tenant: this.dataSource.tenant,
+        data_core: this.dataSource.dataCore,
+        flow_type: this.dataSource.flowType,
+      },
+      this.checkpointQueue.length,
+    )
     for (const [eventType, stat] of this.bufferStats) {
       const labels = {
         tenant: this.dataSource.tenant,
