@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@date-fns/utc": "^2.1.0",
-    "@flowcore/sdk": "^4.2.3",
+    "@flowcore/sdk": "^6.1.0",
     "@flowcore/sdk-oidc-client": "^1.3.1",
     "@flowcore/time-uuid": "^0.2.0",
     "@sinclair/typebox": "0.32.15",
