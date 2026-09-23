@@ -492,12 +492,13 @@ describe("pause checkpoint invariant", () => {
     expect(delivered.length).toBe(1)
     expect(delivered[0]).toBe(source.emitted[0]!.eventId)
 
-    // The checkpoint must sit on the FIRST un-delivered event, never beyond it.
+    // The checkpoint is the last delivered event. The source resumes exclusively
+    // after it, so the first un-delivered event remains eligible after a restart.
     const checkpoint = state.last!.eventId!
     const checkpointIndex = source.emitted.findIndex((e) => e.eventId === checkpoint)
-    expect(checkpointIndex).toBe(1)
+    expect(checkpointIndex).toBe(0)
 
-    // And resume must deliver from exactly there, with no gap and no duplicate.
+    // Resuming the in-memory processor continues at the next event with no gap or duplicate.
     pump.resume()
     for (let i = 0; i < 300 && delivered.length < 10; i++) await tickAsync(1)
     const expected = source.emitted.slice(0, delivered.length).map((e) => e.eventId)

@@ -199,7 +199,9 @@ describe("replay observability metrics", () => {
       noTranslation: true,
     })
 
-    await (pump as unknown as { updateState: (checkpointEventId: string) => Promise<void> | void }).updateState(eventId)
+    await (pump as unknown as { updateState: (checkpoint: FlowcoreDataPumpState) => Promise<void> | void }).updateState(
+      { timeBucket: "20260923120000", eventId },
+    )
 
     expect(stateManager.state?.eventId).toBe(eventId)
   })

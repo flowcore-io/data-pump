@@ -92,9 +92,10 @@ The pump persists a conservative processing frontier using a time bucket and eve
 }
 ```
 
-The fetch position can run ahead of this persisted frontier. When events remain buffered, the saved event ID is based on
-the earliest remaining event rather than simply the last handler to finish. After a crash, the pump may therefore replay
-events. Consumers must use `eventId` as a durable idempotency key.
+The fetch position can run ahead of this persisted frontier. The saved event ID is the last event in source order whose
+processing is complete with no unfinished event before it. The source resumes **after** that ID. If later events finish
+first, the pump holds their completion in memory until the earlier gap closes. After a crash, the pump may replay events
+whose completion was not durably checkpointed. Consumers must use `eventId` as a durable idempotency key.
 
 ### **Event Lifecycle & Processing Modes**
 
