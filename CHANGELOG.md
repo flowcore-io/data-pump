@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/flowcore-io/data-pump/compare/v0.23.1...v0.23.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* remove legacy SDK dependency ([#99](https://github.com/flowcore-io/data-pump/issues/99)) ([5f93fb2](https://github.com/flowcore-io/data-pump/commit/5f93fb2fef0e6e4d7c08a26f4205740652d12c89))
+
 ## [0.23.1](https://github.com/flowcore-io/data-pump/compare/v0.23.0...v0.23.1) (2026-09-15)
 
 
