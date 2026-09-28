@@ -105,8 +105,8 @@ function createFakeFactory(config: FakeFactoryConfig) {
   return { factory, handles }
 }
 
-function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof FlowcoreLogger, string[]> } {
-  const calls: Record<keyof FlowcoreLogger, string[]> = {
+function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof FlowcoreLogger, unknown[][]> } {
+  const calls: Record<keyof FlowcoreLogger, unknown[][]> = {
     debug: [],
     info: [],
     warn: [],
@@ -114,10 +114,10 @@ function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof Flowcor
   }
   return {
     calls,
-    debug: (message) => calls.debug.push(message),
-    info: (message) => calls.info.push(message),
-    warn: (message) => calls.warn.push(message),
-    error: (message) => calls.error.push(String(message)),
+    debug: (...args) => calls.debug.push(args),
+    info: (...args) => calls.info.push(args),
+    warn: (...args) => calls.warn.push(args),
+    error: (...args) => calls.error.push(args),
   }
 }
 
@@ -149,6 +149,23 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
   afterEach(() => {
     factoryStub?.restore()
     factoryStub = undefined
+  })
+
+  it("does not log WebSocket error payloads or their URL-bearing message", async () => {
+    const logger = createRecordingLogger()
+    const { factory } = createFakeFactory({
+      onCreate: (h) => {
+        h.pendingPostConnect.push((handle) => {
+          handle.subject.error(new Error("wss://tenant.example/notifications?credential=fake-secret"))
+        })
+      },
+    })
+    factoryStub = stubProperty(_internals, "createNotificationClient", factory)
+
+    await createNotifier(20_000, logger).wait()
+
+    assertEquals(logger.calls.error, [["Notification stream error"]])
+    assertEquals(JSON.stringify(logger.calls).includes("fake-secret"), false)
   })
 
   it("case 1 — WS error during wait() resolves the promise within 50 ms", async () => {
@@ -590,10 +607,27 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
     const notifier = createNotifier(20_000, logger)
     await notifier.wait()
 
-    assertEquals(logger.calls.debug.includes("WebSocket connection opened."), true)
-    assertEquals(logger.calls.debug.includes("Connection closed: Code [1000], Reason: Disconnected by user"), true)
-    assertEquals(logger.calls.info.includes("WebSocket connection opened."), false)
-    assertEquals(logger.calls.info.includes("Connection closed: Code [1000], Reason: Disconnected by user"), false)
-    assertEquals(logger.calls.info.includes("Attempting reconnection 1 in 1000 ms..."), true)
+    assertEquals(
+      logger.calls.debug.some(([message]) => message === "WebSocket connection opened."),
+      true,
+    )
+    assertEquals(
+      logger.calls.debug.some(
+        ([message]) => message === "Connection closed: Code [1000], Reason: Disconnected by user",
+      ),
+      true,
+    )
+    assertEquals(
+      logger.calls.info.some(([message]) => message === "WebSocket connection opened."),
+      false,
+    )
+    assertEquals(
+      logger.calls.info.some(([message]) => message === "Connection closed: Code [1000], Reason: Disconnected by user"),
+      false,
+    )
+    assertEquals(
+      logger.calls.info.some(([message]) => message === "Attempting reconnection 1 in 1000 ms..."),
+      true,
+    )
   })
 })
