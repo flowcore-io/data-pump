@@ -242,7 +242,7 @@ describe("replay observability metrics", () => {
       dataSource,
     )
 
-    void pump.start(() => {})
+    await pump.start(() => {})
     const [reserved] = await pump.reserve(1)
     await pump.acknowledge([reserved!.eventId])
     pump.stop()

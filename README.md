@@ -163,6 +163,23 @@ creating a projection from retained history.
 - **Behavior**: Process events from specific point in time
 - **Use case**: Backfill data, debugging, data migration, replaying scenarios
 
+### **Strict Resume and Startup Lifecycle**
+
+Set `stateManager.requireExactResumeBucket: true` to require a saved state and an exact match for its time bucket during
+`start()`. Missing state, an unavailable bucket, or a closest bucket before or after the saved bucket rejects startup
+before fetching, processing, publishing running metrics, or starting pulses. This does not prove that every event in the
+bucket is still retained; it only prevents silently selecting a different bucket. The default (`false` or omitted) retains
+the existing closest-bucket/current-hour fallback. Provision an initial state before enabling strict mode.
+
+`isRunning` remains false until state, resume-bucket, and optional `stopAt` lookups succeed. Concurrent starts reject.
+Use `await pump.start(callback)` before reserving events; without a callback, `start()` continues to await the fetch loop.
+Startup lookup failures reject the returned promise rather than invoking the loop callback, and can be retried.
+
+`stop()` cancels a pending startup. Its completed lookups cannot activate the pump or overwrite a newer startup, and its
+callback is not invoked. Cancellation does not abort the underlying lookup: the old `start()` settles when that lookup
+settles (resolving without activation on success, or propagating its rejection). The exact-bucket option applies to
+`start()`, not explicit repositioning via `restart()`.
+
 ### **Batch Size and Application Concurrency**
 
 In version 0.22.x, `processor.concurrency` controls how many events are reserved and passed to one handler invocation. It
