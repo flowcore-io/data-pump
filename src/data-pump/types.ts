@@ -26,6 +26,8 @@ export interface FlowcoreDataPumpDataSource {
 }
 
 export interface FlowcoreDataPumpStateManager {
+  /** Fail before running if the saved bucket cannot be resumed exactly. Opt-in. */
+  requireExactResumeBucket?: boolean
   getState: () => Promise<FlowcoreDataPumpState | null> | FlowcoreDataPumpState | null
   setState?: (state: FlowcoreDataPumpState) => Promise<void> | void
 }

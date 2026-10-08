@@ -473,7 +473,7 @@ describe("startMainLoop self-heal", () => {
 
     let callbackFired = false
     let callbackError: Error | undefined
-    void pump.start((err) => {
+    await pump.start((err) => {
       callbackFired = true
       callbackError = err
     })

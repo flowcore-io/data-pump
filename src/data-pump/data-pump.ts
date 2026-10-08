@@ -108,6 +108,7 @@ interface FlowcoreDataPumpBufferStats {
 export class FlowcoreDataPump {
   private nextCursor?: string
   private running = false
+  private startupToken?: symbol
   // Delivery pause. Independent of `running`: a paused pump keeps fetching, keeps its
   // buffer, keeps its cursor and keeps emitting pulses — it only stops handing events
   // to the processor. The flag is sticky across `restart()` and `stop()`/`start()`, so
@@ -270,33 +271,51 @@ export class FlowcoreDataPump {
   }
 
   public async start(callback?: (error?: Error) => void): Promise<void> {
-    this.isLive = false
-    if (this.running) {
-      throw new Error("Data pump already running")
+    if (this.running || this.startupToken) {
+      throw new Error("Data pump already running or starting")
     }
-    this.running = true
-    this.startedAt = Date.now()
-    this.nextCursor = undefined
-    this.updateMetricsGauges(true)
-    this.pulseEmitter?.start()
-    const currentState = await this.stateManager.getState()
-    const timeBucket = currentState
-      ? await this.dataSource.getClosestTimeBucket(currentState.timeBucket)
-      : format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
-    this.bufferState = {
-      timeBucket: timeBucket ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
-      eventId: currentState ? currentState.eventId : TimeUuid.now().toString(),
-    }
-
-    if (this.options.stopAt) {
-      this.stopAtState = {
-        timeBucket:
-          (await this.dataSource.getClosestTimeBucket(
-            format(startOfHour(utc(this.options.stopAt)), "yyyyMMddHH0000"),
-            true,
-          )) ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
-        eventId: TimeUuid.fromDate(this.options.stopAt).toString(),
+    // Reserve synchronously. stop() invalidates this generation even before running.
+    const token = (this.startupToken = Symbol("startup"))
+    try {
+      const currentState = await this.stateManager.getState()
+      if (this.startupToken !== token) return
+      const strict = this.stateManager.requireExactResumeBucket === true
+      if (strict && !currentState) throw new Error("Required resume bucket state is absent")
+      const timeBucket = currentState
+        ? await this.dataSource.getClosestTimeBucket(currentState.timeBucket)
+        : format(startOfHour(utc(new Date())), "yyyyMMddHH0000")
+      if (this.startupToken !== token) return
+      if (strict && timeBucket !== currentState?.timeBucket) {
+        throw new Error("Required resume bucket is unavailable; refusing fallback or history skip")
       }
+      let stopAtState: FlowcoreDataPumpState | undefined
+      if (this.options.stopAt) {
+        const stopAt = this.options.stopAt
+        const stopBucket = await this.dataSource.getClosestTimeBucket(
+          format(startOfHour(utc(stopAt)), "yyyyMMddHH0000"),
+          true,
+        )
+        if (this.startupToken !== token) return
+        stopAtState = {
+          timeBucket: stopBucket ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
+          eventId: TimeUuid.fromDate(stopAt).toString(),
+        }
+      }
+      // No activation, cursor mutation, metrics or pulse until every await is fenced.
+      this.bufferState = {
+        timeBucket: timeBucket ?? format(startOfHour(utc(new Date())), "yyyyMMddHH0000"),
+        eventId: currentState ? currentState.eventId : TimeUuid.now().toString(),
+      }
+      this.stopAtState = stopAtState
+      this.isLive = false
+      this.running = true
+      this.startedAt = Date.now()
+      this.nextCursor = undefined
+      this.updateMetricsGauges(true)
+      this.pulseEmitter?.start()
+    } finally {
+      // An older cancelled call must not release a newer startup's reservation.
+      if (this.startupToken === token) this.startupToken = undefined
     }
 
     if (this.options.processor) {
@@ -395,6 +414,7 @@ export class FlowcoreDataPump {
   }
 
   public stop(isRestart = false): void {
+    this.startupToken = undefined
     this.running = false
     this.processLoopGeneration++
     this.activeProcessLoopGeneration = undefined
