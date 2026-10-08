@@ -11,6 +11,16 @@
 
 * Report checkpoint-queue depth in pump pulses and `flowcore_data_pump_checkpoint_queue_depth_gauge` so bounded gap backpressure is distinguishable from an idle buffer.
 
+## [0.23.4](https://github.com/flowcore-io/data-pump/compare/v0.23.3...v0.23.4) (2026-10-08)
+
+
+### Bug Fixes
+
+* fence async startup and support exact resume buckets ([ee81730](https://github.com/flowcore-io/data-pump/commit/ee81730ba616a16fb9956bbc949c64e46a33930b))
+* fence async startup and support exact resume buckets ([f885e80](https://github.com/flowcore-io/data-pump/commit/f885e801eb2c57281984e213681b5e8d15369101))
+* **notifier:** avoid logging websocket error payloads ([43f4a3c](https://github.com/flowcore-io/data-pump/commit/43f4a3cc8b2d5b94fbf8f87f7aa08a4a75b2f2ff))
+* **notifier:** avoid logging websocket error payloads ([3ca1af9](https://github.com/flowcore-io/data-pump/commit/3ca1af98e8f44e9cb62544b26330be0ecf516f52))
+
 ## [0.23.3](https://github.com/flowcore-io/data-pump/compare/v0.23.2...v0.23.3) (2026-09-23)
 
 
