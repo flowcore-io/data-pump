@@ -113,8 +113,10 @@ export class FlowcoreNotifier {
     this.subject = new Subject<NotificationEvent>()
     this.subject.subscribe({
       next: this.onWebSocketEvent.bind(this),
-      error: (error: Error) => {
-        this.options.logger?.error("Notification stream error:", { error })
+      error: (_error: unknown) => {
+        // WebSocket implementations may include the request URL in error
+        // payloads. Do not forward the payload or its message to logs.
+        this.options.logger?.error("Notification stream error")
         this.eventResolver?.()
       },
     })
