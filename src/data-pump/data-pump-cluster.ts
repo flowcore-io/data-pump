@@ -16,7 +16,7 @@ const DEFAULT_STALE_THRESHOLD_MS = 30_000
 const DEFAULT_WORKER_CONCURRENCY = 1
 const RECONNECT_BASE_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
-const DELIVERY_TIMEOUT_MS = 30_000
+const DEFAULT_WORKER_DELIVERY_TIMEOUT_MS = 30_000
 
 export interface FlowcoreDataPumpClusterOptions extends FlowcoreDataPumpOptions {
   coordinator: FlowcoreDataPumpCoordinator
@@ -26,6 +26,8 @@ export interface FlowcoreDataPumpClusterOptions extends FlowcoreDataPumpOptions 
   leaseRenewIntervalMs?: number
   heartbeatIntervalMs?: number
   workerConcurrency?: number
+  /** WebSocket worker ACK deadline, including handler/rate-limit wait. Default: 30 seconds. */
+  workerDeliveryTimeoutMs?: number
   clusterKey?: string
 }
 
@@ -44,6 +46,7 @@ export class FlowcoreDataPumpCluster {
   private readonly leaseRenewIntervalMs: number
   private readonly heartbeatIntervalMs: number
   private readonly workerConcurrency: number
+  private readonly workerDeliveryTimeoutMs: number
   private readonly logger?: FlowcoreLogger
 
   private running = false
@@ -80,6 +83,15 @@ export class FlowcoreDataPumpCluster {
     // validate: WS mode requires advertisedAddress
     if (!this.useNatsDistribution && !options.advertisedAddress) {
       throw new Error("advertisedAddress is required when not using NATS distribution (notifier.type !== 'nats')")
+    }
+
+    this.workerDeliveryTimeoutMs = options.workerDeliveryTimeoutMs ?? DEFAULT_WORKER_DELIVERY_TIMEOUT_MS
+    if (
+      !Number.isInteger(this.workerDeliveryTimeoutMs) ||
+      this.workerDeliveryTimeoutMs < 1 ||
+      this.workerDeliveryTimeoutMs > 2_147_483_647
+    ) {
+      throw new Error("workerDeliveryTimeoutMs must be an integer between 1 and 2147483647")
     }
 
     this.instanceId = crypto.randomUUID()
@@ -500,7 +512,7 @@ export class FlowcoreDataPumpCluster {
 
     // wait for ack
     try {
-      await worker.deliveryTracker.add(deliveryId, eventIds, DELIVERY_TIMEOUT_MS)
+      await worker.deliveryTracker.add(deliveryId, eventIds, this.workerDeliveryTimeoutMs)
       worker.pendingCount--
       clusterMetrics.workerAcksCounter.inc()
     } catch (error) {

@@ -951,3 +951,24 @@ app.get("/metrics", async (req, res) => {
 
 Pump event metrics use `tenant`, `data_core`, `flow_type`, and `event_type` labels. The SDK command counter uses only
 `command`. Cluster metrics currently have no tenant or event labels and are process-local.
+
+### WebSocket worker delivery timeout
+
+`FlowcoreDataPumpCluster` accepts optional `workerDeliveryTimeoutMs` (default
+`30000`). It bounds the leader's wait for a WebSocket worker acknowledgement,
+including the handler's rate-limit waits and retries. Supply an integer from 1 to
+2147483647 milliseconds. It does not change the NATS request timeout.
+
+This is separate from `achknowledgeTimeoutMs`, which controls when the source
+reservation can reopen. For slow or throttled handlers, budget both explicitly:
+allow enough worker time for expected processing, and keep the source reservation
+longer than that deadline plus scheduling/acknowledgement margin. For example, a
+single-event handler with at most a 60-second limiter wait and 15 seconds of
+bounded delivery attempts could use an 80-second worker deadline and a source
+reservation longer than 90 seconds. Account separately for batch size and queued
+work; these example values are not safe defaults for arbitrary handlers.
+
+A timeout does not cancel an already-running worker. Its late acknowledgement is
+ignored by the expired tracker; a source retry may duplicate an external side
+effect. Increasing the deadline reduces premature timeouts but does not provide
+exactly-once delivery or eliminate the need for idempotent consumers.
