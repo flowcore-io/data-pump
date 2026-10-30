@@ -11,6 +11,13 @@
 
 * Report checkpoint-queue depth in pump pulses and `flowcore_data_pump_checkpoint_queue_depth_gauge` so bounded gap backpressure is distinguishable from an idle buffer.
 
+## [0.24.0](https://github.com/flowcore-io/data-pump/compare/v0.23.4...v0.24.0) (2026-10-30)
+
+
+### Features
+
+* configure WebSocket worker delivery timeout ([#106](https://github.com/flowcore-io/data-pump/issues/106)) ([34271ea](https://github.com/flowcore-io/data-pump/commit/34271eafa4746cf124435bd1b962a93f9ca80fef))
+
 ## [0.23.4](https://github.com/flowcore-io/data-pump/compare/v0.23.3...v0.23.4) (2026-10-08)
 
 
