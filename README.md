@@ -598,6 +598,20 @@ notifier: {
 }
 ```
 
+To require subprotocol authentication and prevent credentials from being retried in the WebSocket URL, opt in with:
+
+```typescript
+notifier: {
+  type: "websocket",
+  allowQueryFallback: false
+}
+```
+
+This requires SDK 6.2.0 or later and a notification server that negotiates the authentication subprotocol.
+Omitting the option (or setting it to `true`) preserves legacy query fallback. The same option is available on
+`FlowcoreDataPumpCluster`. Strict authentication does not establish subscription authorization or general log redaction.
+A rejected handshake still releases the wait; the pump may continue reading durable storage without notifications.
+
 WebSocket waits have a 20-second safety timeout. An event, connection error, abort signal, or timeout releases the wait so
 the fetch loop can query durable storage again. Each cycle creates a fresh client, allowing the pump to recover from a
 hung or half-open connection.

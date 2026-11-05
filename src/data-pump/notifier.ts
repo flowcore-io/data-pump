@@ -13,6 +13,8 @@ export interface FlowcoreNotifierOptions {
   natsServers?: string[]
   natsConnectionManager?: NatsConnectionManager
   pollerIntervalMs?: number
+  /** False requires subprotocol authentication and disables credential-bearing query fallback. */
+  allowQueryFallback?: boolean
   timeoutMs?: number
   logger?: FlowcoreLogger
   directMode?: boolean
@@ -142,6 +144,7 @@ export class FlowcoreNotifier {
       {
         logger: createNotificationClientLogger(this.options.logger ?? noOpLogger),
         reconnectInterval: 1000,
+        allowQueryFallback: this.options.allowQueryFallback,
       },
     )
 
