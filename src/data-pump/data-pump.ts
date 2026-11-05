@@ -24,6 +24,8 @@ interface FlowcoreDataPumpNotifierNatsOptions {
 
 interface FlowcoreDataPumpNotifierWebsocketOptions {
   type: "websocket"
+  /** Default true. False requires a server supporting subprotocol authentication. */
+  allowQueryFallback?: boolean
 }
 
 interface FlowcoreDataPumpNotifierPollerOptions {
@@ -218,6 +220,7 @@ export class FlowcoreDataPump {
       dataSource: options.dataSource,
       natsServers: options.notifier?.type === "nats" ? options.notifier.servers : undefined,
       pollerIntervalMs: options.notifier?.type === "poller" ? options.notifier.intervalMs : undefined,
+      allowQueryFallback: options.notifier?.type === "websocket" ? options.notifier.allowQueryFallback : undefined,
       logger: options.logger,
       directMode: options.directMode,
       noTranslation: options.noTranslation,

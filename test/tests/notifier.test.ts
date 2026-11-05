@@ -121,7 +121,7 @@ function createRecordingLogger(): FlowcoreLogger & { calls: Record<keyof Flowcor
   }
 }
 
-function createNotifier(timeoutMs?: number, logger?: FlowcoreLogger): FlowcoreNotifier {
+function createNotifier(timeoutMs?: number, logger?: FlowcoreLogger, allowQueryFallback?: boolean): FlowcoreNotifier {
   return new FlowcoreNotifier({
     auth: { apiKey: FAKE_API_KEY, apiKeyId: "testid" },
     dataSource: {
@@ -132,6 +132,7 @@ function createNotifier(timeoutMs?: number, logger?: FlowcoreLogger): FlowcoreNo
     },
     noTranslation: true,
     timeoutMs,
+    allowQueryFallback,
     logger: logger ?? {
       debug: () => {},
       info: () => {},
@@ -630,4 +631,25 @@ describe("FlowcoreNotifier.waitWebSocket — bug fix (v0.20.1)", () => {
       true,
     )
   })
+})
+
+describe("notification query fallback configuration", () => {
+  for (const allowQueryFallback of [false, true, undefined]) {
+    it(`forwards ${String(allowQueryFallback)} without changing the SDK default`, async () => {
+      const { factory, handles } = createFakeFactory({
+        onCreate: (handle) => {
+          handle.errorBeforeConnect = new Error("synthetic handshake failure")
+        },
+      })
+      const stub = stubProperty(_internals, "createNotificationClient", factory)
+      try {
+        await createNotifier(100, undefined, allowQueryFallback).wait()
+        expect(handles).toHaveLength(1)
+        expect(handles[0].options).toHaveProperty("allowQueryFallback", allowQueryFallback)
+        expect(handles[0].disconnectCalls).toBe(1)
+      } finally {
+        stub.restore()
+      }
+    })
+  }
 })
